@@ -39,9 +39,118 @@ const normalizePhone = (num) => {
     return clean;
 };
 
-/**
- * S.I.E PRO - WHATSAPP BROADCAST ENGINE V22.0 (TACTICAL ID TARGETING)
- */
+// =========================================================================
+// CRM & AUTOMATION ENGINE (NEW)
+// =========================================================================
+
+export const createRule = async (req, res) => {
+    const { title, conditions } = req.body;
+    try {
+        const [result] = await pool.query(
+            "INSERT INTO automation_rules (title, conditions) VALUES (?, ?)",
+            [title, JSON.stringify(conditions || [])]
+        );
+        res.json({ id: result.insertId, success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+export const getRules = async (req, res) => {
+    try {
+        const [rows] = await pool.query("SELECT * FROM automation_rules ORDER BY id DESC");
+        res.json({ data: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+export const deleteRule = async (req, res) => {
+    try {
+        await pool.query("DELETE FROM automation_rules WHERE id = ?", [req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+export const getCampaigns = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT c.*, r.title as rule_title, t.name as template_name
+            FROM campaigns c
+            LEFT JOIN automation_rules r ON c.rule_id = r.id
+            LEFT JOIN message_templates t ON c.template_id = t.id
+            ORDER BY c.created_at DESC
+        `);
+        res.json({ data: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+export const executeCampaign = async (req, res) => {
+    const { title, ruleId, templateId } = req.body;
+    try {
+        // 1. Fetch Rule & Template
+        const [[rule]] = await pool.query("SELECT conditions FROM automation_rules WHERE id = ?", [ruleId]);
+        const [[template]] = await pool.query("SELECT content FROM message_templates WHERE id = ?", [templateId]);
+        
+        if (!rule || !template) return res.status(404).json({ error: "REGRA_OU_TEMPLATE_NAO_ENCONTRADO" });
+
+        // 2. Build Dynamic Query
+        let query = "SELECT id, name, phone, unit FROM users WHERE active = 1 AND phone IS NOT NULL";
+        const params = [];
+        const conditions = typeof rule.conditions === 'string' ? JSON.parse(rule.conditions) : rule.conditions;
+
+        const allowedFields = ['role', 'status', 'unit', 'resident_type', 'neighborhood', 'city'];
+
+        if (Array.isArray(conditions) && conditions.length > 0) {
+            conditions.forEach(cond => {
+                if (allowedFields.includes(cond.field)) {
+                    if (cond.operator === 'EQUALS') {
+                        query += ` AND ${cond.field} = ?`;
+                        params.push(cond.value);
+                    } else if (cond.operator === 'NOT_EQUALS') {
+                        query += ` AND ${cond.field} != ?`;
+                        params.push(cond.value);
+                    } else if (cond.operator === 'CONTAINS') {
+                        query += ` AND ${cond.field} LIKE ?`;
+                        params.push(`%${cond.value}%`);
+                    }
+                }
+            });
+        }
+
+        const [targets] = await pool.query(query, params);
+
+        if (targets.length === 0) return res.json({ success: false, message: "Nenhum alvo encontrado para esta regra." });
+
+        // 3. Create Campaign Record
+        const [campResult] = await pool.query(
+            "INSERT INTO campaigns (title, rule_id, template_id, status, total_targets) VALUES (?, ?, ?, 'RUNNING', ?)",
+            [title, ruleId, templateId, targets.length]
+        );
+        const campaignId = campResult.insertId;
+
+        // 4. Fill Scheduled Broadcasts
+        for (const user of targets) {
+            const msgBody = resolveTemplate(template.content, { 
+                nome: user.name.split(' ')[0], 
+                unidade: user.unit || '---',
+                sigla: 'S.I.E' // Can be fetched from settings if needed
+            });
+
+            await pool.query(
+                "INSERT INTO scheduled_broadcasts (user_id, target_type, target_value, message_body, template_id, scheduled_at, status, campaign_id) VALUES (?, 'CAMPAIGN', ?, ?, ?, NOW(), 'PENDING', ?)",
+                [user.id, user.id, msgBody, templateId, campaignId]
+            );
+        }
+
+        res.json({ success: true, targets: targets.length, campaignId });
+
+    } catch (e) {
+        console.error("Campaign Execution Fail:", e);
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// =========================================================================
+// STANDARD MESSAGING
+// =========================================================================
+
 export const whatsappBroadcast = async (req, res) => {
     const { 
         message, 
@@ -49,7 +158,7 @@ export const whatsappBroadcast = async (req, res) => {
         targetType, 
         targetRole, 
         userId, 
-        userIds, // Nova Matriz de IDs Selecionados (vinda do BI/Radar)
+        userIds, 
         directNumber, 
         footer, 
         contextData, 
@@ -97,7 +206,6 @@ export const whatsappBroadcast = async (req, res) => {
             const [[user]] = await pool.query('SELECT phone, name, unit FROM users WHERE id = ?', [userId]);
             if (user && user.phone) recipients = [user];
         } else if (targetType === 'SELECTED' && Array.isArray(userIds) && userIds.length > 0) {
-            // SRE CORE: Seleção Cirúrgica por IDs (Fila do BI/Radar)
             const [rows] = await pool.query(
                 'SELECT phone, name, unit FROM users WHERE id IN (?) AND active = 1 AND phone IS NOT NULL',
                 [userIds]
@@ -179,9 +287,6 @@ export const whatsappBroadcast = async (req, res) => {
     }
 };
 
-/**
- * SURVEY DISPATCH ENGINE: Gera links e dispara convites de censo.
- */
 export const surveyBroadcast = async (req, res) => {
     const { surveyId, targetRole, customMessage } = req.body;
     try {
@@ -194,7 +299,6 @@ export const surveyBroadcast = async (req, res) => {
 
         const message = customMessage || `Olá {nome}, convidamos você para participar do censo: *${survey.title}*.\n\nSua participação é fundamental para o cluster {sigla}.\n\nAcesse pelo link: ${surveyLink}`;
 
-        // Reutiliza a lógica de broadcast
         req.body = {
             message,
             targetType: 'ROLE',

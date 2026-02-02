@@ -1,11 +1,69 @@
 
 import pool from '../config/database.js';
 import { IAProviderManager } from '../core/ai/IAProviderManager.js';
-import { Type } from "@google/genai";
+import { whatsappBroadcast } from './communicationController.js';
+import bcrypt from 'bcryptjs';
+import axios from 'axios';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// --- NÚCLEO DE SEGURANÇA E HIGIENIZAÇÃO ---
-const sanitize = (str) => (typeof str === 'string' ? str.replace(/[<>]/g, '').trim() : '');
+// ============================================================================
+// SRE UTILS & HELPERS
+// ============================================================================
 
+/**
+ * SRE Utils: Cálculo de idade biográfica (Preservado Passo 1)
+ */
+const calculateAge = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (isNaN(birthDate.getTime())) return null;
+    const now = new Date();
+    let age = now.getFullYear() - birthDate.getFullYear();
+    const m = now.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < birthDate.getDate())) age--;
+    return age;
+};
+
+/**
+ * SRE Helper: Converte data BR (DD/MM/AAAA) para MySQL (YYYY-MM-DD)
+ * PATCH V2: Validação estrita de Mês/Dia para evitar crash do MySQL.
+ */
+const formatToMySQLDate = (dob) => {
+    if (!dob || typeof dob !== 'string') return null;
+    const clean = dob.trim();
+    
+    // Check YYYY-MM-DD (ISO)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+        const [y, m, d] = clean.split('-').map(Number);
+        // Validação Lógica de Calendário
+        if (m < 1 || m > 12 || d < 1 || d > 31) return null; 
+        return clean;
+    }
+
+    // Check DD/MM/YYYY or DD-MM-YYYY (BR)
+    const brMatch = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (brMatch) {
+        let [_, d, m, y] = brMatch.map(Number);
+        
+        // Handle 2-digit year (SRE Rule: >30 = 19xx, <=30 = 20xx)
+        if (y < 100) y = y > 30 ? 1900 + y : 2000 + y;
+
+        // Validação Estrita para prevenir '0107-56-19'
+        if (m < 1 || m > 12) return null;
+        if (d < 1 || d > 31) return null;
+
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+    return null;
+};
+
+/**
+ * SRE Helper: Parser de campos JSON (Atualizado Passo 2)
+ * Garante tratamento de erros mais robusto.
+ */
 const parseField = (field, isArray = false) => {
     const fallback = isArray ? [] : {};
     if (!field) return fallback;
@@ -16,275 +74,371 @@ const parseField = (field, isArray = false) => {
     } catch (e) { return fallback; }
 };
 
-// =========================================================================
-// 1. NEURAL ARCHITECT - LÓGICA DE EIXOS SELETIVOS
-// =========================================================================
-export const suggestQuestions = async (req, res) => {
-    let { title, description, maxQuestions, excludedPillars = [], customPillarName = "" } = req.body;
+/**
+ * SRE Helper: Limpeza de resposta JSON da IA (Atualizado Passo 2)
+ */
+const cleanAIJsonResponse = (text) => {
+    if (!text) return "{}";
+    return text.replace(/```json|```/g, "").trim();
+};
 
-    title = sanitize(title);
-    description = sanitize(description);
-    const cleanCustomName = sanitize(customPillarName);
-    const safeMaxQuestions = Math.min(parseInt(maxQuestions) || 10, 40);
-
-    const allPillars = {
-        "1": "Demografia",
-        "2": "Saúde",
-        "3": "Social/Assistência",
-        "4": "Educação",
-        "5": "Esporte/Lazer",
-        "6": cleanCustomName
-    };
-
-    const activePillarIds = Object.keys(allPillars).filter(id => {
-        const isNotExcluded = !excludedPillars.includes(id);
-        if (id === "6") return isNotExcluded && cleanCustomName.length > 0;
-        return isNotExcluded;
+/**
+ * SRE Personalization Engine: Resolve variáveis contextuais em templates.
+ * (Preservado do Passo 1 para compatibilidade Legacy)
+ */
+const resolveTemplate = (content, data) => {
+    if (!content) return "";
+    let resolved = content;
+    Object.entries(data).forEach(([key, val]) => {
+        const regex = new RegExp(`\\{${key}\\}`, 'gi');
+        resolved = resolved.replace(regex, val || '---');
     });
+    return resolved;
+};
 
-    if (activePillarIds.length === 0) {
-        return res.status(400).json({
-            error: "BLOQUEIO_NEURAL: Nenhum Eixo Estratégico ativo."
-        });
+/**
+ * SRE Helper: Persist base64 avatar to uploads and return public URL.
+ */
+const persistBase64Image = async (dataUrl, filenamePrefix, req) => {
+    if (!dataUrl?.startsWith('data:')) return dataUrl;
+    const matches = dataUrl.match(/^data:(.+);base64,(.*)$/);
+    if (!matches) return dataUrl;
+
+    const mime = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const uploadDir = path.resolve(__dirname, '../uploads');
+
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
     }
 
+    const safePrefix = String(filenamePrefix || 'public').replace(/\W+/g, '_').toLowerCase();
+    const uniqueSuffix = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
+    const filename = `sie_public_${safePrefix}_${uniqueSuffix}.${ext}`;
+    const filePath = path.join(uploadDir, filename);
+
+    await fs.promises.writeFile(filePath, buffer);
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.get('host');
+    return `${protocol}://${host}/uploads/${filename}`;
+};
+
+/**
+ * SRE WELCOME DISPATCHER (LEGACY V12 - Preservado do Passo 1)
+ * Fallback caso o whatsappBroadcast falhe ou para notificações não-broadcast.
+ */
+const sendWelcomeMessage = async (userData, shortName) => {
+    if (!userData.phone) return;
+    const agent = new https.Agent({ rejectUnauthorized: false });
     try {
-        const prompt = `
-            ATUE COMO: Arquiteto de Dados Censitários Estrito e Especialista em UX Research.
-            CONTEXTO: Protocolo "${title}" - ${description}.
-            DIRETRIZES: Perguntas curtas (<40 chars), tom seco e direto.
-            EIXOS PERMITIDOS:
-            ${activePillarIds.map(id => `ID [${id}]: ${allPillars[id]}`).join('\n')}
-            TOTAL: ${safeMaxQuestions} perguntas.
-            `;
-        
-        const responseSchema = {
-            type: Type.OBJECT,
-            properties: {
-                audit: {
-                    type: Type.OBJECT,
-                    properties: { strategy_summary: { type: Type.STRING }, branching_factor: { type: Type.STRING } },
-                    required: ["strategy_summary", "branching_factor"]
-                },
-                questions: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            temp_id: { type: Type.STRING },
-                            logic_parent_temp_id: { type: Type.STRING },
-                            logic_trigger_value: { type: Type.STRING },
-                            pilar: { type: Type.STRING, enum: activePillarIds },
-                            text: { type: Type.STRING },
-                            type: { type: Type.STRING, enum: ["select", "text", "boolean", "number"] },
-                            mapping_tag: { type: Type.STRING },
-                            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        },
-                        required: ["temp_id", "pilar", "text", "type", "mapping_tag"]
-                    }
-                }
+        const [[settings]] = await pool.query('SELECT whatsapp_config FROM settings WHERE id = 1');
+        let config = settings?.whatsapp_config;
+        if (config && typeof config === 'string') config = JSON.parse(config);
+        if (!config?.welcome_msg || !config?.api_key) return;
+        const [[tpl]] = await pool.query("SELECT content FROM message_templates WHERE event_trigger = 'WELCOME_CENSUS' AND is_active = 1 LIMIT 1");
+        const welcomeText = tpl?.content || `Olá {nome}! Bem-vindo ao cluster {sigla}. Seu registro foi protocolado com sucesso no censo digital.`;
+        const personalized = resolveTemplate(welcomeText, {
+            nome: (userData.name || 'Membro').split(' ')[0],
+            unidade: userData.unit || 'HUB',
+            sigla: shortName
+        });
+        await axios({
+            method: 'post',
+            url: config.gateway_url || 'https://jennyai.space/send-message',
+            params: {
+                api_key: config.api_key,
+                sender: config.sender,
+                number: userData.phone.replace(/\D/g, ''),
+                message: personalized,
+                footer: config.footer || shortName
             },
-            required: ["audit", "questions"]
+            timeout: 10000,
+            httpsAgent: agent
+        });
+        console.log(`[SRE WELCOME LEGACY] Mensagem enviada para: ${userData.phone}`);
+    } catch (e) {
+        console.error(`[SRE WELCOME LEGACY FAIL] Erro no disparo: ${e.message}`);
+    }
+};
+
+// ============================================================================
+// CONTROLLERS
+// ============================================================================
+
+/**
+ * NEURAL ARCHITECT V3.0 (Evolução Passo 2)
+ * Substitui o suggestQuestions simples do Passo 1 por lógica de auditoria heurística.
+ */
+export const suggestQuestions = async (req, res) => {
+    const { title, description, depth, maxQuestions, parentSurveyId, config } = req.body;
+
+    try {
+        let chainContext = "";
+        if (parentSurveyId) {
+            const [[parent]] = await pool.query("SELECT title, questions FROM surveys WHERE id = ?", [parentSurveyId]);
+            if (parent) {
+                const parentQs = parseField(parent.questions, true).map(q => q.text).join(", ");
+                chainContext = `ESTA PESQUISA É UMA CONTINUAÇÃO DE: "${parent.title}". 
+                JÁ TEMOS DADOS SOBRE: [${parentQs}]. 
+                FOQUE EM NOVOS ATRIBUTOS E AVANCE NA INVESTIGAÇÃO SEM SER REDUNDANTE.`;
+            }
+        }
+
+        const depthGuides = {
+            1: "BÁSICO (Essencial): Identificação core, demografia simples, contatos e dados binários (Sim/Não). Baixo atrito.",
+            2: "INTERMEDIÁRIO (Operacional): Comportamento de uso, frequência, satisfação setorial e hábitos de convivência.",
+            3: "PROFUNDO (Estratégico): Diagnóstico psicossocial, vulnerabilidades, talentos ocultos e sugestões de infraestrutura detalhadas."
         };
 
+        // Fallback para config legacy se depth não for passado
+        const contextDesc = description || config?.targetAudience || "Mapeamento multissetorial de moradores";
+
+        const prompt = `
+        ATUE COMO: Arquiteto Social e Analista de UX Research SRE do S.I.E PRO.
+        OBJETIVO: Estruturar uma PESQUISA INTELIGENTE para o cluster: "${title}".
+        DESCRIÇÃO DO CONTEXTO: ${contextDesc}.
+        
+        PARÂMETROS TÁTICOS:
+        - NÍVEL DE PROFUNDIDADE: ${depth || 1} (${depthGuides[depth || 1]})
+        - LIMITE DE ATRIBUTOS: Máximo ${maxQuestions || 10} perguntas.
+        ${chainContext}
+
+        DIRETRIZES RIGOROSAS:
+        1. CARGA COGNITIVA: Estime o esforço mental necessário para responder.
+        2. ANÁLISE SETORIAL: Distribua as perguntas entre os pilares (EDUCAÇÃO, ESPORTE, LAZER, SAÚDE, ASSISTÊNCIA, TURISMO).
+        3. LOGICA: Use mapping_tag compatível com o BI territorial.
+
+        FORMATO DE SAÍDA (JSON PURO):
+        {
+          "audit": {
+            "cognitive_load": "LOW|MEDIUM|HIGH",
+            "estimated_minutes": number,
+            "logic_complexity": "LINEAR|BRANCHED",
+            "sectoral_analysis": { "SAUDE": percentage, "LAZER": percentage, "OUTROS": percentage },
+            "strategy_summary": "Explique por que este roteiro é eficiente para o nível ${depth}"
+          },
+          "questions": [
+            { 
+              "id": "slug", 
+              "text": "Pergunta clara e objetiva?", 
+              "type": "text|select|boolean|number", 
+              "mapping_tag": "EDUCACAO|SAUDE|ESPORTE|LAZER|ASSISTENCIA_SOCIAL|TURISMO|OUTROS",
+              "required": true,
+              "options": ["Opção 1", "Opção 2"],
+              "cognitive_weight": 1|2|3
+            }
+          ]
+        }
+        `;
+
         const aiResponse = await IAProviderManager.execute('survey_suggestion', {
+            model: IAProviderManager.MODELS.FAST,
             contents: prompt,
             config: {
-                systemInstruction: `Motor de classificação de dados. IDs: ${activePillarIds.join(', ')}.`,
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
-                temperature: 0.1 
+                systemInstruction: "Você é um gerador de pesquisas sociais balanceadas. Priorize UX e profundidade de dados sem cansar o usuário. Retorne apenas JSON.",
+                responseMimeType: "application/json"
             }
         });
 
-        const result = typeof aiResponse.text === 'string' ? JSON.parse(aiResponse.text) : aiResponse.text;
-
-        if (result.questions && Array.isArray(result.questions)) {
-            result.questions = result.questions.map(q => {
-                let assignedPilar = String(q.pilar);
-                if (!activePillarIds.includes(assignedPilar)) assignedPilar = activePillarIds[0];
-                return { ...q, pilar: assignedPilar, logic_parent_id: q.logic_parent_temp_id || '' };
-            });
-        }
-
-        res.json({ data: result });
-
+        const cleanedData = JSON.parse(cleanAIJsonResponse(aiResponse.text));
+        res.json({ data: cleanedData });
     } catch (e) {
-        console.error("[SRE IA CRITICAL FAIL]", e);
-        res.status(500).json({ error: "FALHA_NA_ARQUITETURA_NEURAL", details: e.message });
+        console.error("[SRE IA FAIL]", e);
+        res.status(500).json({ error: "FALHA_NA_ARQUITETURA_NEURAL" });
     }
 };
 
-// =========================================================================
-// 2. VALIDAÇÃO E SUBMISSÃO (PUBLIC FLOW)
-// =========================================================================
-
-export const checkResident = async (req, res) => {
-    try {
-        const rawCpf = req.params.cpf || '';
-        const cleanCPF = rawCpf.replace(/\D/g, '');
-        
-        if (!cleanCPF) return res.status(400).json({ error: "CPF inválido" });
-
-        // Busca o usuário na base para pré-preenchimento
-        const [rows] = await pool.query(
-            `SELECT id, name, unit FROM users WHERE cpf_cnpj = ? LIMIT 1`, 
-            [cleanCPF]
-        );
-
-        if (rows.length > 0) {
-            res.json({ found: true, ...rows[0] });
-        } else {
-            res.json({ found: false });
-        }
-    } catch (e) { 
-        console.error("Check Resident Error:", e);
-        res.status(500).json({ error: "ERRO_VALIDACAO_KERNEL" }); 
-    }
-};
-
+/**
+ * SUBMIT RESPONSE (Preservado Passo 1 - Crítico)
+ * Mantém transações, criação/update de usuário, logs de auditoria e triggers WhatsApp.
+ * A versão do Passo 2 foi descartada por ser incompleta.
+ */
 export const submitResponse = async (req, res) => {
     const { cpf, userData, answers } = req.body;
     const surveyId = req.params.surveyId;
-    const cleanCPF = String(cpf || '').replace(/\D/g, '');
-    
+    const cleanCPF = String(cpf).replace(/\D/g, '');
+    const connection = await pool.getConnection();
+
     try {
-        // 1. Tenta vincular a um usuário existente
-        let userId = null;
-        let finalUserName = userData?.name ? sanitize(userData.name) : "VISITANTE EXTERNO";
-        let userPhone = userData?.phone || null; // Tenta pegar do form público se existir
+        await connection.beginTransaction();
+        const [[surveyConfig]] = await connection.query('SELECT * FROM surveys WHERE id = ?', [surveyId]);
+        if (!surveyConfig) throw new Error("CENSO_NAO_LOCALIZADO");
 
-        if (cleanCPF) {
-            const [users] = await pool.query("SELECT id, name, phone FROM users WHERE cpf_cnpj = ?", [cleanCPF]);
-            if (users.length > 0) {
-                userId = users[0].id;
-                if (users[0].name) finalUserName = users[0].name;
-                if (users[0].phone) userPhone = users[0].phone; // Prioriza telefone do cadastro
-            }
+        const [existing] = await connection.query('SELECT id, socialData, phone, whatsapp, avatar_url FROM users WHERE cpf_cnpj = ?', [cleanCPF]);
+        let userId = existing[0]?.id;
+        
+        // SRE DATE FIX: Validação rigorosa antes do UPDATE
+        const isoBirthDate = formatToMySQLDate(userData.birth_date);
+        
+        const avatarUrl = await persistBase64Image(userData.avatar_url || existing[0]?.avatar_url, cleanCPF || 'public', req);
+
+        const userPayload = {
+            name: (userData.name || '').toUpperCase(),
+            unit: userData.unit,
+            email: userData.email,
+            phone: userData.phone,
+            whatsapp: userData.whatsapp,
+            birth_date: isoBirthDate, // Pode ser NULL se inválido, evitando crash
+            age: calculateAge(isoBirthDate),
+            cep: userData.cep,
+            street: userData.street,
+            number: userData.number,
+            complement: userData.complement,
+            neighborhood: userData.neighborhood,
+            city: userData.city,
+            state: userData.state,
+            profession: userData.profession,
+            rg: userData.rg,
+            issuing_authority: userData.issuing_authority,
+            gender: userData.gender,
+            resident_type: userData.resident_type,
+            voting_rights: userData.voting_rights,
+            preferred_channel: userData.preferred_channel,
+            avatar_url: avatarUrl,
+            active: 1
+        };
+
+        if (!userId) {
+            userPayload.cpf_cnpj = cleanCPF;
+            userPayload.status = 'PENDING';
+            userPayload.role = 'RESIDENT';
+            userPayload.socialData = JSON.stringify(answers);
+            if (userData.password) userPayload.password_hash = await bcrypt.hash(userData.password, 10);
+            const [result] = await connection.query('INSERT INTO users SET ?', [userPayload]);
+            userId = result.insertId;
+        } else {
+            const currentSocial = parseField(existing[0]?.socialData, false);
+            userPayload.socialData = JSON.stringify({ ...currentSocial, ...answers });
+            await connection.query('UPDATE users SET ? WHERE id = ?', [userPayload, userId]);
         }
 
-        // 2. Cálculo de Risco (Risk Score Heurístico)
-        let riskScore = 0;
-        const answerValues = Object.values(answers || {}).map(v => String(v).toUpperCase());
-        
-        // Palavras-chave que elevam o risco social/operacional
-        const criticalKeywords = ['CRÍTICO', 'PÂNICO', 'RUIM', 'PRECÁRIO', 'INSEGURO', 'FOME', 'DESEMPREGO', 'VIOLÊNCIA'];
-        const warningKeywords = ['REGULAR', 'ATENÇÃO', 'DIFICULDADE', 'FALTA'];
+        await connection.query(
+            'INSERT INTO survey_responses (survey_id, user_id, cpf, user_name, answers) VALUES (?, ?, ?, ?, ?)',
+            [surveyId, userId, cleanCPF, userData.name || 'Membro Externo', JSON.stringify(answers)]
+        );
 
-        answerValues.forEach(val => {
-            if (criticalKeywords.some(k => val.includes(k))) riskScore += 20;
-            if (warningKeywords.some(k => val.includes(k))) riskScore += 10;
-        });
-        
-        // Normaliza score até 100
-        riskScore = Math.min(riskScore, 100);
+        await connection.query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, details) VALUES (?, "SUBMIT_CENSUS", "surveys", ?, ?)',
+            [userId, surveyId, `Resposta comitada para ${surveyConfig.title}`]
+        );
 
-        // 3. Persistência com Failover de Schema
-        let insertId = null;
-        try {
-            const [result] = await pool.query(
-                'INSERT INTO survey_responses (survey_id, user_id, cpf, user_name, answers, risk_score) VALUES (?, ?, ?, ?, ?, ?)',
-                [surveyId, userId, cleanCPF, finalUserName, JSON.stringify(answers || {}), riskScore]
-            );
-            insertId = result.insertId;
-        } catch (dbError) {
-            // Fallback para bases legadas
-            if (dbError.code === 'ER_BAD_FIELD_ERROR') {
-                const [result] = await pool.query(
-                    'INSERT INTO survey_responses (survey_id, user_id, cpf, user_name, answers) VALUES (?, ?, ?, ?, ?)',
-                    [surveyId, userId, cleanCPF, finalUserName, JSON.stringify(answers || {})]
-                );
-                insertId = result.insertId;
-            } else {
-                throw dbError;
+        await connection.commit();
+
+        // Lógica de Trigger WhatsApp (Preservada Passo 1)
+        if (surveyConfig.whatsapp_trigger_enabled && surveyConfig.whatsapp_template_id) {
+            const targetPhone = userData.whatsapp || userData.phone || existing[0]?.whatsapp || existing[0]?.phone;
+            if (targetPhone) {
+                const broadcastReq = {
+                    body: {
+                        templateId: surveyConfig.whatsapp_template_id,
+                        targetType: 'DIRECT',
+                        directNumber: targetPhone.replace(/\D/g, ''),
+                        contextData: {
+                            survey_title: surveyConfig.title,
+                            nome: (userData.name || 'Membro').split(' ')[0]
+                        }
+                    },
+                    user: { id: 0 }
+                };
+                whatsappBroadcast(broadcastReq, { json: () => { }, status: () => ({ json: () => { } }) }).catch(e => console.error("[SRE TRIGGER FAIL]", e.message));
             }
+        } else {
+            const [[settings]] = await connection.query('SELECT shortName FROM settings WHERE id = 1');
+            await sendWelcomeMessage(userPayload, settings?.shortName || 'S.I.E');
         }
 
-        // 4. PROTOCOLO SRE: Gatilho de Mensagem WELCOME_CENSUS (Assíncrono)
-        (async () => {
-            try {
-                // A. Verifica se há um template de evento global 'WELCOME_CENSUS' ativo
-                const [templates] = await pool.query(
-                    "SELECT id, content FROM message_templates WHERE event_trigger = 'WELCOME_CENSUS' AND is_active = 1 LIMIT 1"
-                );
-
-                if (templates.length > 0) {
-                    const template = templates[0];
-                    const targetPhone = userPhone || userData?.whatsapp; // Fallback para dado do form público
-
-                    // Só enfileira se tiver telefone válido
-                    if (targetPhone) {
-                        const [[settings]] = await pool.query('SELECT shortName FROM settings WHERE id = 1');
-                        
-                        // Substituição básica de variáveis (O Worker fará a resolução completa)
-                        // Injetamos o templateId para que o Worker resolva a mídia se houver
-                        let msgBody = template.content
-                            .replace(/{nome}/gi, finalUserName.split(' ')[0])
-                            .replace(/{protocolo}/gi, insertId)
-                            .replace(/{sigla}/gi, settings?.shortName || 'S.I.E');
-
-                        await pool.query(
-                            'INSERT INTO scheduled_broadcasts (user_id, target_type, target_value, message_body, template_id, scheduled_at, status) VALUES (?, "DIRECT", ?, ?, ?, NOW(), "PENDING")',
-                            [userId || 0, targetPhone, msgBody, template.id]
-                        );
-                        console.log(`[SRE TRIGGER] WELCOME_CENSUS disparado para ${cleanCPF}`);
-                    }
-                }
-            } catch (triggerError) {
-                console.warn("[SRE TRIGGER IGNORED]", triggerError.message);
-                // Não falha a requisição principal, apenas loga o erro do gatilho
-            }
-        })();
-
-        res.json({ success: true, protocol: insertId });
-
-    } catch (e) { 
-        console.error("[SRE SURVEY SUBMIT ERROR]", e.message);
-        res.status(500).json({ error: "ERRO_AO_SALVAR", details: e.message }); 
+        res.json({ success: true, protocol: Date.now(), userId: userId, next_survey_id: surveyConfig.next_survey_id });
+    } catch (e) {
+        await connection.rollback();
+        console.error("[SRE CENSO CRITICAL FAIL]", e);
+        res.status(500).json({ error: "FALHA_AO_GRAVAR_LEDGER", details: e.message });
+    } finally {
+        connection.release();
     }
-};
-
-export const generateAISummary = async (req, res) => {
-    const { answers } = req.body;
-    try {
-        const prompt = `Analise este snapshot social e gere um diagnóstico tático: ${JSON.stringify(answers)}`;
-        const aiResponse = await IAProviderManager.execute('census_summary', { contents: prompt });
-        res.json({ text: aiResponse.text });
-    } catch (e) { res.status(500).json({ error: "FALHA_SUMARIO_IA" }); }
 };
 
 export const getAllSurveys = async (req, res) => {
     try {
         const [rows] = await pool.query("SELECT * FROM surveys ORDER BY created_at DESC");
-        rows.forEach(r => r.questions = parseField(r.questions, true));
+        rows.forEach(r => { r.questions = parseField(r.questions, true); });
         res.json({ data: rows });
     } catch (e) { res.status(500).json({ error: "DATABASE_READ_ERROR" }); }
 };
 
-export const getPublicSurvey = async (req, res) => {
+/**
+ * CHECK RESIDENT (Preservado Passo 1 - Crítico)
+ * Mantém a seleção extensa de dados necessária para o frontend (Passo 2 estava incompleto).
+ */
+export const checkResident = async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM surveys WHERE id = ? AND status = "ACTIVE"', [req.params.id]);
-        if (!rows.length) return res.status(404).json({ error: 'PESQUISA_INDISPONIVEL' });
-        const survey = rows[0];
-        survey.questions = parseField(survey.questions, true);
-        res.json(survey);
-    } catch (e) { res.status(500).json({ error: "ERRO_FORM_PUBLICO" }); }
+        const cleanCPF = req.params.cpf.replace(/\D/g, '');
+        const [rows] = await pool.query(
+            `SELECT name, unit, email, phone, age, avatar_url, rg, issuing_authority, gender, birth_date, resident_type, voting_rights, role, status, whatsapp, preferred_channel, profession, cep, street, number, complement, neighborhood, city, state, socialData FROM users WHERE cpf_cnpj = ?`,
+            [cleanCPF]
+        );
+        if (rows.length > 0) {
+            const userData = rows[0];
+            userData.socialData = parseField(userData.socialData, false);
+            res.json({ found: true, ...userData });
+        } else {
+            res.json({ found: false });
+        }
+    } catch (e) {
+        res.status(500).json({ error: "ERRO_VALIDACAO_KERNEL" });
+    }
 };
 
+export const generateAISummary = async (req, res) => {
+    const { userData, answers } = req.body;
+    try {
+        // Prompt Evoluído (Passo 2)
+        const prompt = `Analise os dados sociodemográficos de um morador e gere um resumo tático de 3 linhas em CAIXA ALTA sobre seu perfil para a gestão. Perfil: ${JSON.stringify(userData)}. Respostas: ${JSON.stringify(answers)}`;
+        const aiResponse = await IAProviderManager.execute('census_summary', { contents: prompt });
+        res.json({ text: aiResponse.text });
+    } catch (e) { res.status(500).json({ error: "FALHA_SUMARIO_IA" }); }
+};
+
+/**
+ * GET ALL RESPONSES (Evolução Passo 2)
+ * Inclui LEFT JOIN com surveys para trazer o título, melhorando a visualização.
+ */
 export const getAllResponses = async (req, res) => {
     try {
-        const [rows] = await pool.query(`SELECT sr.*, s.title as survey_title FROM survey_responses sr LEFT JOIN surveys s ON sr.survey_id = s.id ORDER BY sr.created_at DESC`);
+        const [rows] = await pool.query(`
+            SELECT sr.*, s.title as survey_title 
+            FROM survey_responses sr
+            LEFT JOIN surveys s ON sr.survey_id = s.id
+            ORDER BY sr.created_at DESC
+        `);
         rows.forEach(r => r.answers = parseField(r.answers, false));
         res.json({ data: rows });
     } catch (e) { res.status(500).json({ error: "ERRO_AO_LER_RESPOSTAS" }); }
 };
 
+export const getAllSurveyResponses = getAllResponses; // Alias para compatibilidade
+
 export const getResponses = async (req, res) => {
     try {
-        const [rows] = await pool.query(`SELECT sr.*, u.name as user_name, u.unit FROM survey_responses sr LEFT JOIN users u ON sr.user_id = u.id WHERE sr.survey_id = ? ORDER BY sr.created_at DESC`, [req.params.id]);
+        const [rows] = await pool.query("SELECT * FROM survey_responses WHERE survey_id = ? ORDER BY created_at DESC", [req.params.id]);
         rows.forEach(r => r.answers = parseField(r.answers, false));
         res.json({ data: rows });
-    } catch (e) { res.status(500).json({ error: "ERRO_AO_FILTRAR_RESPOSTAS" }); }
+    } catch (e) { res.status(500).json({ error: "ERRO_FETCH_DATA" }); }
+};
+
+export const getPublicSurvey = async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM surveys WHERE id = ? AND status = "ACTIVE"', [req.params.id]);
+        if (!rows.length) return res.status(404).json({ error: 'CENSO_INDISPONIVEL' });
+        const survey = rows[0];
+        survey.questions = parseField(survey.questions, true);
+        res.json(survey);
+    } catch (e) { res.status(500).json({ error: "ERRO_FORM_PUBLICO" }); }
 };
 
 export const getResponsesByCpf = async (req, res) => {
@@ -294,4 +448,16 @@ export const getResponsesByCpf = async (req, res) => {
         rows.forEach(r => r.answers = parseField(r.answers, false));
         res.json({ data: rows });
     } catch (e) { res.status(500).json({ error: "ERRO_HISTORICO_MEMBRO" }); }
+};
+
+export const getPublicResponseByCpf = async (req, res) => {
+    const cleanCPF = String(req.params.cpf).replace(/\D/g, '');
+    try {
+        const [rows] = await pool.query("SELECT * FROM survey_responses WHERE survey_id = ? AND cpf = ? LIMIT 1", [req.params.surveyId, cleanCPF]);
+        if (rows.length > 0) {
+            res.json({ found: true, answers: parseField(rows[0].answers, false), data: rows[0] });
+        } else {
+            res.json({ found: false });
+        }
+    } catch (e) { res.status(500).json({ error: "FALHA_RECOMPOSICAO" }); }
 };

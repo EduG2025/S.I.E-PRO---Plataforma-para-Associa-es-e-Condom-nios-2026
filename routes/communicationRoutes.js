@@ -1,3 +1,4 @@
+
 import express from 'express';
 import * as commController from '../controllers/communicationController.js';
 import { createHandlers } from '../controllers/genericController.js';
@@ -107,5 +108,18 @@ router.delete('/schedules/:id',
     checkPermission('manage_communication'), 
     commController.deleteSchedule
 );
+
+// =========================================================================
+// CRM & AUTOMATION ENGINE ROUTING (NEW)
+// =========================================================================
+
+// Rules Management
+router.get('/rules', authenticateToken, checkPermission('manage_communication'), commController.getRules);
+router.post('/rules', authenticateToken, checkPermission('manage_communication'), commController.createRule);
+router.delete('/rules/:id', authenticateToken, checkPermission('manage_communication'), commController.deleteRule);
+
+// Campaigns Management
+router.get('/campaigns', authenticateToken, checkPermission('manage_communication'), commController.getCampaigns);
+router.post('/campaigns/execute', authenticateToken, checkPermission('manage_communication'), commController.executeCampaign);
 
 export default router;

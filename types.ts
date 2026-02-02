@@ -1,8 +1,9 @@
+
 import React from 'react';
 
 /**
  * S.I.E NUCLEUS - GLOBAL TYPE DEFINITIONS
- * Version: 6.8.0 - STUDIO LAB SRE MASTER EXPANSION
+ * Version: 9.0.0 - STUDIO LAB MASTER SOVEREIGNTY
  */
 
 export interface DesignTokens {
@@ -10,8 +11,7 @@ export interface DesignTokens {
   containerPadding: number;
   viewportPadding: number;
   sidebarWidth: number;
-  sidebarWidthCollapsed?: number;
-  textPadding?: number;
+  sidebarWidthCollapsed: number;
   footerHeight: number;
   shadowIntensity: number;
   fontSizeBase: number;
@@ -21,16 +21,29 @@ export interface DesignTokens {
   dangerColor: string;
   warningColor: string;
   surfaceColor: string;
-  sidebarBg?: string;
-  sidebarActiveColor?: string;
-  sidebarTextColor?: string;
-  sidebarIconSize?: number;
-  sidebarBorderColor?: string;
-  sidebarHoverColor?: string;
-  // SRE V43 Geometria Ativa
-  formOverlapOffset: number; // Controle de encaixe do formulário no header (px)
-  borderSpacing: number;     // Afastamento externo dos componentes (px)
-  centerTitle: boolean;      // Alinhamento global de títulos de módulos
+  sidebarBg: string;
+  sidebarActiveColor: string;
+  sidebarTextColor: string;
+  sidebarIconSize: number;
+  sidebarBorderColor: string;
+  sidebarHoverColor: string;
+  // SRE V45 Geometria Ativa & Soberania Visual
+  formOverlapOffset: number;
+  borderSpacing: number;
+  centerTitle: boolean;
+  cardShadowIntensity: number;
+  inputHeight: number;
+  // SRE V80 Expansão de DNA
+  fontWeightHeading: number;
+  letterSpacingBase: number;
+  buttonRadius: number;
+  buttonWeight: number;
+  inputBorderWidth: number;
+  cardBorderWidth: number;
+  glassOpacity: number;
+  // SRE V90 Mobile Navigation Sovereignty
+  mobileMenuType: 'SIDEBAR' | 'DRAWER_TOP' | 'BOTTOM_NAV';
+  mobileMenuSide: 'left' | 'right';
 }
 
 export interface DualDesignSystem {
@@ -206,12 +219,34 @@ export interface ScheduledBroadcast {
   message_body: string;
   scheduled_at: string;
   status: string;
+  campaign_id?: string | number;
+}
+
+// CRM ENGINE TYPES
+export interface AutomationRule {
+  id: string | number;
+  title: string;
+  conditions: {
+    field: string;
+    operator: 'EQUALS' | 'NOT_EQUALS' | 'CONTAINS';
+    value: string;
+  }[];
+  created_at?: string;
+}
+
+export interface Campaign {
+  id: string | number;
+  title: string;
+  status: 'DRAFT' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
+  total_targets: number;
+  sent_count: number;
+  created_at?: string;
 }
 
 export interface SurveyQuestion {
   id: string;
   text: string;
-  type: 'text' | 'select' | 'boolean' | 'number' | 'multimedia' | 'repeater';
+  type: 'text' | 'select' | 'boolean' | 'number' | 'multimedia' | 'repeater' | 'date';
   options?: string[];
   required?: number | boolean;
   mapping_tag?: string;

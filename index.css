@@ -1,6 +1,6 @@
 
 :root {
-  /* Variáveis Nucleares - Soberania StudioLab */
+  /* Variáveis Nucleares - Soberania StudioLab Master */
   --sie-primary: #4f46e5;
   --sie-success: #10b981;
   --sie-danger: #ef4444;
@@ -9,22 +9,44 @@
   --sie-radius: 1.5rem;
   --sie-viewport-padding: 2rem;
   --sie-sidebar-width: 280px;
+  --sie-sidebar-width-collapsed: 80px;
   --sie-footer-height: 80px;
-  --font-base: 16px;
+  --sie-font-base: 16px;
+  --sie-font-scale: 1.2;
+  --sie-border-spacing: 24px;
+  --sie-padding-inner: 32px;
+  --sie-form-overlap: 20px;
+  --sie-input-h: 56px;
+  
+  /* SRE Master Typography */
+  --sie-font-weight-heading: 900;
+  --sie-letter-spacing: -0.05em;
+  
+  /* SRE Master UI Details */
+  --sie-button-radius: 1rem;
+  --sie-button-weight: 900;
+  --sie-input-border-w: 1px;
+  --sie-card-border-w: 1px;
+  --sie-glass-opacity: 0.96;
 
-  /* Sidebar Dinâmica - Default Values */
+  /* Sidebar Dinâmica */
   --sie-sidebar-bg: #020617;
   --sie-sidebar-active: #4f46e5;
   --sie-sidebar-text: #94a3b8;
   --sie-sidebar-border: rgba(255, 255, 255, 0.08);
   --sie-sidebar-hover: rgba(255, 255, 255, 0.05);
   
-  /* Inputs & Controls */
-  --sie-input-bg: #ffffff;
-  --sie-border-color: #e2e8f0;
+  /* Sombras Dinâmicas */
+  --sie-shadow-opacity: 0.1;
+  --sie-shadow: 0 10px 15px -3px rgba(0, 0, 0, var(--sie-shadow-opacity));
+  --sie-shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, var(--sie-shadow-opacity));
+
+  /* Alinhamento de Título */
+  --sie-title-align: left;
+  --sie-title-justify: flex-start;
 }
 
-/* SRE: Reset de Viewport Absoluto - BLOQUEIO DE SCROLL GLOBAL */
+/* SRE: Reset de Viewport Absoluto */
 html,
 body {
   margin: 0;
@@ -34,7 +56,7 @@ body {
   font-family: 'Inter', sans-serif;
   background-color: var(--sie-surface);
   -webkit-font-smoothing: antialiased;
-  overflow: hidden; /* Vital: Impede scroll na janela inteira */
+  overflow: hidden; 
 }
 
 #root {
@@ -48,7 +70,7 @@ body {
 main {
   flex: 1;
   height: 100%;
-  overflow: hidden; /* Vital: O conteúdo interno que deve scrollar */
+  overflow: hidden; 
   position: relative;
   display: flex;
   flex-direction: column;
@@ -70,52 +92,112 @@ main {
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease, border 0.3s ease;
 }
 
-.sidebar-item {
+/* VDNA: CLASSES SEMÂNTICAS UNIVERSAIS */
+.sie-card {
+  background-color: #ffffff;
+  border-radius: var(--sie-radius);
+  padding: var(--sie-padding-inner);
+  margin: var(--sie-border-spacing);
+  box-shadow: var(--sie-shadow);
+  border: var(--sie-card-border-w) solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.sie-card:hover {
+  box-shadow: var(--sie-shadow-lg);
+  border-color: var(--sie-primary);
+}
+
+.sie-input {
+  height: var(--sie-input-h);
+  border-radius: calc(var(--sie-radius) * 0.7);
+  padding: 0 1.5rem;
+  background-color: #f8fafc;
+  border: var(--sie-input-border-w) solid #e2e8f0;
+  font-size: var(--sie-font-base);
+  font-weight: 700;
+  text-transform: uppercase;
+  outline: none;
   transition: all 0.2s ease;
 }
 
-/* Container de Conteúdo Mestre - FULL FILL */
+.sie-input:focus {
+  background-color: #ffffff;
+  border-color: var(--sie-primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.sie-button {
+  height: var(--sie-input-h);
+  border-radius: var(--sie-button-radius);
+  padding: 0 2rem;
+  font-weight: var(--sie-button-weight);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: calc(var(--sie-font-base) * 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.sie-button-primary {
+  background-color: var(--sie-primary);
+  color: #ffffff;
+  box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
+}
+
+.sie-button-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.sie-header-title {
+  font-size: calc(var(--sie-font-base) * var(--sie-font-scale) * 1.5);
+  font-weight: var(--sie-font-weight-heading);
+  letter-spacing: var(--sie-letter-spacing);
+  text-align: var(--sie-title-align);
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.sie-header-slogan {
+  font-size: calc(var(--sie-font-base) * 0.6);
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  text-align: var(--sie-title-align);
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-top: 0.5rem;
+}
+
 .sie-viewport-content {
-  flex: 1; /* Ocupa todo espaço restante do main */
-  height: 100%; /* Garante altura total */
+  flex: 1;
+  height: 100%;
   width: 100%;
   padding: var(--sie-viewport-padding);
-  padding-bottom: calc(var(--sie-viewport-padding) + var(--sie-footer-height)); /* Espaço extra footer */
+  padding-bottom: calc(var(--sie-viewport-padding) + var(--sie-footer-h));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* Impede scroll aqui, passa para os filhos (Modules) */
+  overflow: hidden; 
 }
 
-/* 
-   SRE STUDIO LAB OVERRIDES 
-   Força a aplicação das variáveis visuais sobre o Tailwind 
-*/
-button, 
-input, 
-select, 
-textarea, 
-.rounded-xl, 
-.rounded-2xl, 
-.rounded-3xl,
-[class*="rounded-"] {
-  border-radius: var(--sie-radius) !important;
-}
-
-/* Modal Overlay SRE */
 .sie-editor-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(2, 6, 23, 0.96);
+  background-color: rgba(2, 6, 23, var(--sie-glass-opacity));
   backdrop-filter: blur(20px);
   z-index: 9999999 !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--sie-viewport-padding); /* Respeita padding configurado */
+  padding: var(--sie-viewport-padding);
   animation: overlayFadeIn 0.3s ease-out forwards;
 }
 
@@ -132,53 +214,18 @@ textarea,
   position: relative;
   border: 1px solid rgba(255, 255, 255, 0.15);
   animation: modalScaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  /* Borda controlada pelo Studio tbm se desejar, mas mantendo fixo por enquanto */
   border-radius: var(--sie-radius) !important; 
 }
 
-/* Scrollbar SRE Style */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(79, 70, 229, 0.2);
-  border-radius: 20px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--sie-primary);
-}
+.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(79, 70, 229, 0.2); border-radius: 20px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--sie-primary); }
 
 @keyframes overlayFadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalScaleUp { from { transform: scale(0.95) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
 
-.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
 @media (max-width: 640px) {
-  :root {
-    --sie-viewport-padding: 0.75rem;
-    --sie-radius: 1rem;
-  }
-  .sie-modal-container {
-    height: 100%;
-    max-height: 100%;
-    margin: 0;
-    border-radius: 0 !important; /* Fullscreen em mobile */
-  }
-}
-
-/* Protocolo de Impressão */
-@media print {
-  @page { size: A4 portrait; margin: 1cm; }
-  html, body, main { background: #fff !important; color: #000 !important; overflow: visible !important; height: auto !important; }
-  #root { display: block !important; }
-  .sidebar-glass, .print-hidden, button, header, footer, nav, .quick-launcher, .fixed, .absolute { display: none !important; }
-  .sie-viewport-content { padding: 0 !important; margin: 0 !important; overflow: visible !important; display: block !important; }
+  :root { --sie-viewport-padding: 0.75rem; }
+  .sie-modal-container { height: 100%; max-height: 100%; margin: 0; border-radius: 0 !important; }
 }

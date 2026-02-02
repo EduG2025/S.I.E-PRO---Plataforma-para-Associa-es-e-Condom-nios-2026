@@ -119,29 +119,54 @@ const App = () => {
         return isMobileView ? designSystem.mobile : designSystem.desktop;
     }, [designSystem, isMobileView]);
 
-    // SRE: INJEÇÃO DE TOKENS VISUAIS NO ROOT DO DOM
+    // SRE: INJEÇÃO DE TOKENS VISUAIS NO ROOT DO DOM (VDNA SOVEREIGNTY)
     useEffect(() => {
         if (!currentTokens) return;
         const root = document.documentElement;
         
-        // Geometria
+        // Geometria Universal
         root.style.setProperty('--sie-radius', `${currentTokens.borderRadius}px`);
-        root.style.setProperty('--sie-sidebar-width', sidebarCollapsed ? '80px' : `${currentTokens.sidebarWidth}px`);
+        root.style.setProperty('--sie-sidebar-width', sidebarCollapsed ? `${currentTokens.sidebarWidthCollapsed || 80}px` : `${currentTokens.sidebarWidth}px`);
         root.style.setProperty('--sie-viewport-padding', `${currentTokens.viewportPadding}px`);
         root.style.setProperty('--sie-padding-inner', `${currentTokens.containerPadding}px`);
         root.style.setProperty('--sie-border-spacing', `${currentTokens.borderSpacing}px`);
         root.style.setProperty('--sie-footer-h', `${currentTokens.footerHeight}px`);
         root.style.setProperty('--sie-font-base', `${currentTokens.fontSizeBase}px`);
+        root.style.setProperty('--sie-font-scale', `${currentTokens.fontScale || 1.2}`);
         root.style.setProperty('--sie-form-overlap', `${currentTokens.formOverlapOffset}px`);
+        root.style.setProperty('--sie-input-h', `${currentTokens.inputHeight || 56}px`);
         
+        // SRE Master Typography & UI
+        root.style.setProperty('--sie-font-weight-heading', `${currentTokens.fontWeightHeading || 900}`);
+        root.style.setProperty('--sie-letter-spacing', `${(currentTokens.letterSpacingBase || 0) / 100}em`);
+        root.style.setProperty('--sie-button-radius', `${currentTokens.buttonRadius ?? currentTokens.borderRadius}px`);
+        root.style.setProperty('--sie-button-weight', `${currentTokens.buttonWeight || 900}`);
+        root.style.setProperty('--sie-input-border-w', `${currentTokens.inputBorderWidth || 1}px`);
+        root.style.setProperty('--sie-card-border-w', `${currentTokens.cardBorderWidth || 1}px`);
+        root.style.setProperty('--sie-glass-opacity', `${(currentTokens.glassOpacity || 96) / 100}`);
+        
+        // SRE V90 Mobile Nav
+        root.style.setProperty('--sie-mobile-menu-type', currentTokens.mobileMenuType || 'SIDEBAR');
+        root.style.setProperty('--sie-mobile-menu-side', currentTokens.mobileMenuSide || 'left');
+
         // Cores e Superfícies
         root.style.setProperty('--sie-primary', currentTokens.primaryColor);
+        root.style.setProperty('--sie-success', currentTokens.successColor || '#10b981');
+        root.style.setProperty('--sie-danger', currentTokens.dangerColor || '#ef4444');
+        root.style.setProperty('--sie-warning', currentTokens.warningColor || '#f59e0b');
         root.style.setProperty('--sie-surface', currentTokens.surfaceColor || '#f8fafc');
         root.style.setProperty('--sie-sidebar-bg', currentTokens.sidebarBg || '#020617');
         root.style.setProperty('--sie-sidebar-border', currentTokens.sidebarBorderColor || 'rgba(255,255,255,0.05)');
         root.style.setProperty('--sie-sidebar-text', currentTokens.sidebarTextColor || '#94a3b8');
         root.style.setProperty('--sie-sidebar-active', currentTokens.sidebarActiveColor || currentTokens.primaryColor);
         root.style.setProperty('--sie-sidebar-hover', currentTokens.sidebarHoverColor || 'rgba(255,255,255,0.05)');
+
+        // Sombras
+        const si = currentTokens.shadowIntensity || 0.1;
+        const csi = currentTokens.cardShadowIntensity || si;
+        root.style.setProperty('--sie-shadow-opacity', `${si}`);
+        root.style.setProperty('--sie-shadow', `0 ${si * 10}px ${si * 15}px -3px rgba(0, 0, 0, ${si * 2})`);
+        root.style.setProperty('--sie-shadow-lg', `0 ${csi * 20}px ${csi * 25}px -5px rgba(0, 0, 0, ${csi * 2})`);
 
         // Tipografia
         root.style.setProperty('--sie-title-align', currentTokens.centerTitle ? 'center' : 'left');
@@ -206,12 +231,12 @@ const App = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden bg-[var(--sie-surface)]">
-            <aside className={`sidebar-glass flex flex-col ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'w-20' : ''}`}>
+            <aside className={`sidebar-glass flex flex-col ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'w-20' : ''}`} style={{ width: 'var(--sie-sidebar-width)' }}>
                 <div className="p-6 shrink-0 border-b" style={{ borderColor: 'var(--sie-sidebar-border)' }}>
                     <div className="flex items-center justify-between gap-4">
                         {!sidebarCollapsed && (
                             <div className="flex items-center gap-4 min-w-0">
-                                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-2 shadow-2xl">
+                                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-2 shadow-2xl" style={{ borderRadius: 'var(--sie-radius)' }}>
                                     {systemInfo.logoUrl ? <img src={systemInfo.logoUrl} className="w-full h-full object-contain" /> : <Shield size={20} className="text-indigo-600" />}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -226,7 +251,6 @@ const App = () => {
                     </div>
                 </div>
                 
-                {/* SRE SYNC: CLOCK INJECTION */}
                 <div className={`px-4 py-2 ${sidebarCollapsed ? 'hidden' : ''}`}>
                     <ServerClock />
                 </div>
@@ -240,6 +264,7 @@ const App = () => {
                                     <button key={item.id} onClick={() => { setActiveTab(item.id); window.location.hash = item.id; if(isMobileView) setSidebarOpen(false); }} 
                                         className={`sidebar-item w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${activeTab === item.id ? 'shadow-xl text-white' : 'hover:bg-[var(--sie-sidebar-hover)]'}`}
                                         style={{ 
+                                            borderRadius: 'var(--sie-radius)',
                                             backgroundColor: activeTab === item.id ? 'var(--sie-sidebar-active)' : 'transparent',
                                             color: activeTab === item.id ? '#ffffff' : 'var(--sie-sidebar-text)'
                                         }}
@@ -253,7 +278,7 @@ const App = () => {
                     ))}
                 </nav>
                 <div className="p-4 border-t bg-black/10" style={{ borderColor: 'var(--sie-sidebar-border)' }}>
-                    <button onClick={() => { localStorage.removeItem('sie_auth_token'); window.location.reload(); }} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-all font-black text-[9px] uppercase tracking-widest">
+                    <button onClick={() => { localStorage.removeItem('sie_auth_token'); window.location.reload(); }} className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-all font-black text-[9px] uppercase tracking-widest" style={{ borderRadius: 'var(--sie-radius)' }}>
                         <LogOut size={18} />
                         {!sidebarCollapsed && <span>Sair</span>}
                     </button>
@@ -263,7 +288,7 @@ const App = () => {
                 <div className="sie-viewport-content custom-scrollbar">
                     <Suspense fallback={<div className="flex-1 flex flex-col items-center justify-center p-20"><Loader2 className="animate-spin text-indigo-600" size={48} /></div>}>{renderContent()}</Suspense>
                 </div>
-                <button onClick={() => setSidebarOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-[100] p-5 bg-slate-900 text-white rounded-full shadow-2xl"><Menu size={24} /></button>
+                <button onClick={() => setSidebarOpen(true)} className="lg:hidden fixed bottom-6 right-6 z-[100] p-5 bg-slate-900 text-white rounded-full shadow-2xl" style={{ borderRadius: 'var(--sie-radius)' }}><Menu size={24} /></button>
             </main>
         </div>
     );

@@ -137,6 +137,12 @@ export const communicationService = {
     getSchedules: () => api.get('/communication/schedules'),
     createSchedule: (data: any) => api.post('/communication/schedules', data),
     deleteSchedule: (id: any) => api.delete(`/communication/schedules/${id}`),
+    // CRM Engine Methods
+    getRules: () => api.get('/communication/rules'),
+    createRule: (data: any) => api.post('/communication/rules', data),
+    deleteRule: (id: any) => api.delete(`/communication/rules/${id}`),
+    getCampaigns: () => api.get('/communication/campaigns'),
+    executeCampaign: (data: any) => api.post('/communication/campaigns/execute', data),
 };
 
 export const operationsService = {

@@ -61,19 +61,43 @@ const healSchema = async () => {
             `CREATE TABLE IF NOT EXISTS survey_responses (id INT AUTO_INCREMENT PRIMARY KEY, survey_id INT, user_id INT, cpf VARCHAR(20), user_name VARCHAR(255), answers JSON, risk_score INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
             `CREATE TABLE IF NOT EXISTS vehicles (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, plate VARCHAR(20) NOT NULL UNIQUE, brand VARCHAR(50), model VARCHAR(100), color VARCHAR(30), unit VARCHAR(50), type VARCHAR(20), status VARCHAR(20), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
             `CREATE TABLE IF NOT EXISTS access_logs (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, visitor_id INT, direction VARCHAR(10), method VARCHAR(20), point VARCHAR(100), photo_url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
-            `CREATE TABLE IF NOT EXISTS scheduled_broadcasts (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, target_type VARCHAR(20), target_value VARCHAR(255), message_body TEXT, template_id INT, scheduled_at DATETIME, status VARCHAR(20), error_log TEXT, sent_at DATETIME, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`
+            `CREATE TABLE IF NOT EXISTS scheduled_broadcasts (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, target_type VARCHAR(20), target_value VARCHAR(255), message_body TEXT, template_id INT, scheduled_at DATETIME, status VARCHAR(20), error_log TEXT, sent_at DATETIME, campaign_id INT DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+            `CREATE TABLE IF NOT EXISTS automation_rules (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100), conditions JSON, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+            `CREATE TABLE IF NOT EXISTS campaigns (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100), rule_id INT, template_id INT, status VARCHAR(20) DEFAULT 'DRAFT', total_targets INT DEFAULT 0, sent_count INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`
         ];
 
         for (const sql of coreTables) { try { await pool.query(sql); } catch (e) { console.warn("Table Init Warn:", e.message); } }
 
-        // HEALING COLUMNS
+        // HEALING COLUMNS (FINANCIALS & OPERATIONS)
         await addColumnSafe('financials', 'plan_id', 'INT DEFAULT NULL AFTER user_id');
         await addColumnSafe('financials', 'due_date', 'DATE DEFAULT NULL AFTER amount');
         await addColumnSafe('financials', 'is_recurring', 'TINYINT(1) DEFAULT 0 AFTER type');
+        await addColumnSafe('scheduled_broadcasts', 'campaign_id', 'INT DEFAULT NULL');
         
-        // CORREÇÃO CRÍTICA: RISK_SCORE & SCHEDULED_BROADCASTS
+        // HEALING COLUMNS (SURVEYS)
         await addColumnSafe('survey_responses', 'risk_score', 'INT DEFAULT 0');
         await addColumnSafe('survey_responses', 'user_id', 'INT NULL');
+        
+        // HEALING COLUMNS (USERS - CRITICAL FOR CENSUS V2)
+        await addColumnSafe('users', 'socialData', 'JSON');
+        await addColumnSafe('users', 'cep', 'VARCHAR(20)');
+        await addColumnSafe('users', 'street', 'VARCHAR(255)');
+        await addColumnSafe('users', 'number', 'VARCHAR(20)');
+        await addColumnSafe('users', 'complement', 'VARCHAR(100)');
+        await addColumnSafe('users', 'neighborhood', 'VARCHAR(100)');
+        await addColumnSafe('users', 'city', 'VARCHAR(100)');
+        await addColumnSafe('users', 'state', 'VARCHAR(5)');
+        await addColumnSafe('users', 'rg', 'VARCHAR(20)');
+        await addColumnSafe('users', 'issuing_authority', 'VARCHAR(50)');
+        await addColumnSafe('users', 'gender', 'VARCHAR(20)');
+        await addColumnSafe('users', 'profession', 'VARCHAR(100)');
+        await addColumnSafe('users', 'resident_type', 'VARCHAR(20) DEFAULT "TITULAR"');
+        await addColumnSafe('users', 'voting_rights', 'TINYINT(1) DEFAULT 1');
+        await addColumnSafe('users', 'preferred_channel', 'VARCHAR(20) DEFAULT "WHATSAPP"');
+        
+        // SRE WATCHDOG FIX: Colunas de log de mensageria
+        await addColumnSafe('scheduled_broadcasts', 'sent_at', 'DATETIME NULL');
+        await addColumnSafe('scheduled_broadcasts', 'error_log', 'TEXT NULL');
 
     } catch (e) { console.error("Critical Healing Fail:", e.message); }
 };
@@ -175,6 +199,11 @@ const runMessageQueue = async () => {
 
                 await axios.post(endpoint, payload);
                 await pool.query('UPDATE scheduled_broadcasts SET status = "SENT", sent_at = NOW() WHERE id = ?', [item.id]);
+                
+                // SRE: Update Campaign Stats if linked
+                if (item.campaign_id) {
+                    await pool.query('UPDATE campaigns SET sent_count = sent_count + 1 WHERE id = ?', [item.campaign_id]);
+                }
 
             } catch (err) {
                 console.error(`[SRE MSG FAIL] ID ${item.id}:`, err.message);
