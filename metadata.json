@@ -1,0 +1,9 @@
+{
+  "name": "S.I.E PRO - Plataforma para Associações e Condomínios 2026",
+  "description": "Plataforma para Associações e Condomínios. Integrado com IA - 2026",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

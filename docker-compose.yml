@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: sie-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: siecacaria
+      MYSQL_ROOT_PASSWORD: Gegerminal180#
+      MYSQL_USER: siecacaria
+      MYSQL_PASSWORD: Gegerminal180
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  app:
+    build: .
+    container_name: sie-kernel
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: db
+      DB_USER: siecacaria
+      DB_PASS: Gegerminal180
+      DB_NAME: siecacaria
+      API_KEY: ${API_KEY}
+    depends_on:
+      - db
+
+volumes:
+  mysql_data:
