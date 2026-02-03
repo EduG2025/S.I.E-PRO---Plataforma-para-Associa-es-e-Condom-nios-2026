@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
     Car, Plus, Search, Loader2, Trash2, Edit2, X, Save, 
@@ -30,8 +31,9 @@ const VehicleManagement = ({ systemInfo }: { systemInfo: SystemInfo }) => {
     const loadData = async () => {
         setIsLoading(true);
         try {
+            // SRE FIX: Rota corrigida de /community/vehicles para /vehicles (Operational Route)
             const [vRes, uRes] = await Promise.all([
-                api.get('/community/vehicles'),
+                api.get('/vehicles'),
                 userService.getAll(1, 1000)
             ]);
             setVehicles(vRes.data.data || []);
@@ -44,12 +46,24 @@ const VehicleManagement = ({ systemInfo }: { systemInfo: SystemInfo }) => {
         e.preventDefault();
         setIsSaving(true);
         try {
-            if (editingVehicle.id) await api.put(`/community/vehicles/${editingVehicle.id}`, editingVehicle);
-            else await api.post('/community/vehicles', editingVehicle);
+            // SRE FIX: Rotas de escrita corrigidas
+            if (editingVehicle.id) await api.put(`/vehicles/${editingVehicle.id}`, editingVehicle);
+            else await api.post('/vehicles', editingVehicle);
             setIsModalOpen(false);
             loadData();
         } catch (e) { alert("Erro ao salvar veículo."); }
         finally { setIsSaving(false); }
+    };
+
+    const handleDelete = async (id: number) => {
+        if(confirm("Remover veículo permanentemente?")) { 
+            try {
+                await api.delete(`/vehicles/${id}`); 
+                loadData(); 
+            } catch(e) {
+                alert("Erro ao remover veículo.");
+            }
+        } 
     };
 
     const primaryColor = systemInfo.primaryColor || '#4f46e5';
@@ -82,20 +96,28 @@ const VehicleManagement = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
                     {isLoading ? <div className="p-20 text-center"><Loader2 className="animate-spin text-indigo-600 mx-auto" size={40}/></div> : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {vehicles.filter(v => v.plate.includes(searchTerm.toUpperCase())).map(v => (
+                            {vehicles.filter(v => v.plate.includes(searchTerm.toUpperCase()) || v.unit?.includes(searchTerm.toUpperCase())).map(v => (
                                 <div key={v.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group flex flex-col justify-between">
                                     <div className="flex justify-between items-start mb-6">
                                         <div className="p-3 bg-slate-50 text-slate-400 rounded-xl group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all"><Car size={24}/></div>
-                                        <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase border ${v.status === 'AUTHORIZED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>{v.status}</span>
+                                        <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase border ${v.status === 'AUTHORIZED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : v.status === 'BLOCKED' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                            {v.status === 'AUTHORIZED' ? 'AUTORIZADO' : v.status === 'BLOCKED' ? 'BLOQUEADO' : 'VISITANTE'}
+                                        </span>
                                     </div>
                                     <h3 className="text-2xl font-black text-slate-800 tracking-tightest mb-1">{v.plate}</h3>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">{v.brand} {v.model} • UNID. {v.unit}</p>
                                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                         <button onClick={() => { setEditingVehicle(v); setIsModalOpen(true); }} className="p-2 text-slate-300 hover:text-indigo-600"><Edit2 size={16}/></button>
-                                        <button onClick={async () => { if(confirm("Remover veículo?")) { await api.delete(`/community/vehicles/${v.id}`); loadData(); } }} className="p-2 text-slate-300 hover:text-rose-600"><Trash2 size={16}/></button>
+                                        <button onClick={() => handleDelete(v.id)} className="p-2 text-slate-300 hover:text-rose-600"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
                             ))}
+                            {!isLoading && vehicles.length === 0 && (
+                                <div className="col-span-full py-20 text-center opacity-40">
+                                    <Car size={48} className="mx-auto mb-4 text-slate-300"/>
+                                    <p className="text-[10px] font-black uppercase">Nenhum veículo registrado</p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -109,21 +131,21 @@ const VehicleManagement = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                                 <h3 className="font-black text-xl uppercase tracking-tighter">Dossiê de Veículo</h3>
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 hover:bg-rose-500 rounded-xl transition-all"><X size={24}/></button>
                             </div>
-                            <div className="p-10 space-y-6 bg-white">
+                            <div className="p-10 space-y-6 bg-white rounded-b-[3rem]">
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Placa (Identificador)</label>
-                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-lg font-black uppercase outline-none focus:border-indigo-500" value={editingVehicle.plate} onChange={e => setEditingVehicle({...editingVehicle, plate: e.target.value.toUpperCase()})} />
+                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-lg font-black uppercase outline-none focus:border-indigo-500" value={editingVehicle.plate} onChange={e => setEditingVehicle({...editingVehicle, plate: e.target.value.toUpperCase()})} placeholder="ABC-1234" />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidade Vínculo</label>
-                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500" value={editingVehicle.unit} onChange={e => setEditingVehicle({...editingVehicle, unit: e.target.value.toUpperCase()})} />
+                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500" value={editingVehicle.unit} onChange={e => setEditingVehicle({...editingVehicle, unit: e.target.value.toUpperCase()})} placeholder="EX: BLOCO A-101" />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Marca / Modelo</label>
-                                        <input className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-sm font-bold uppercase outline-none focus:border-indigo-500" value={editingVehicle.brand} onChange={e => setEditingVehicle({...editingVehicle, brand: e.target.value.toUpperCase()})} />
+                                        <input className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-sm font-bold uppercase outline-none focus:border-indigo-500" value={editingVehicle.brand} onChange={e => setEditingVehicle({...editingVehicle, brand: e.target.value.toUpperCase()})} placeholder="EX: TOYOTA COROLLA" />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estado de Acesso</label>
@@ -134,8 +156,8 @@ const VehicleManagement = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                                         </select>
                                     </div>
                                 </div>
-                                <button type="submit" disabled={isSaving} className="w-full py-6 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-600 transition-all">
-                                    {isSaving ? <Loader2 className="animate-spin mx-auto" /> : 'Sincronizar Veículo'}
+                                <button type="submit" disabled={isSaving} className="w-full py-6 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3">
+                                    {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Sincronizar Veículo
                                 </button>
                             </div>
                         </form>

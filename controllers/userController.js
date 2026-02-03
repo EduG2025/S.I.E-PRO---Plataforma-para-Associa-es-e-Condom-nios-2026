@@ -1,5 +1,7 @@
+
 import pool from '../config/database.js';
 import bcrypt from 'bcryptjs';
+import axios from 'axios';
 
 const SAFE_FIELDS = "id, name, username, cpf_cnpj, email, role, status, active, unit, age, birth_date, rg, issuing_authority, gender, nationality, phone, whatsapp, preferred_channel, avatar_url, document_front_url, document_back_url, ocr_payload, socialData, coordinates, profession, voting_rights, resident_type, created_by, parent_id, last_login, created_at, updated_at, cep, street, number, complement, neighborhood, city, state";
 
@@ -161,4 +163,72 @@ export const activateUser = async (req, res) => {
 
 export const generateInvite = async (req, res) => {
     res.json({ success: true, invite_code: `SIE-${Math.random().toString(36).substring(7).toUpperCase()}` });
+};
+
+// SRE GEO-BATCH PROCESSOR
+// Executa em background para não travar a requisição HTTP (pode demorar minutos)
+export const batchGeocode = async (req, res) => {
+    try {
+        // 1. Identificar registros sem coordenadas ou com coordenadas zeradas
+        const [users] = await pool.query(`
+            SELECT id, street, number, city, state, neighborhood 
+            FROM users 
+            WHERE (coordinates IS NULL OR coordinates LIKE '%"lat":0%') 
+            AND street IS NOT NULL 
+            AND number IS NOT NULL
+            LIMIT 50
+        `);
+
+        if (users.length === 0) {
+            return res.json({ success: true, message: "Todos os registros já estão geolocalizados." });
+        }
+
+        // Responde imediatamente para não dar timeout no frontend
+        res.json({ success: true, message: `Iniciando geocoding de ${users.length} registros em background...` });
+
+        // Processamento Assíncrono
+        (async () => {
+            console.log(`[SRE GEO] Iniciando lote de ${users.length} registros...`);
+            let updated = 0;
+            
+            for (const user of users) {
+                try {
+                    const query = `${user.street}, ${user.number}, ${user.neighborhood || ''}, ${user.city}, ${user.state}, Brasil`;
+                    
+                    // Delay para respeitar Rate Limit do Nominatim (1 req/sec)
+                    await new Promise(r => setTimeout(r, 2000));
+
+                    const geoRes = await axios.get(`https://nominatim.openstreetmap.org/search`, {
+                        params: { format: 'json', limit: 1, q: query },
+                        headers: { 'User-Agent': 'SIE-PRO-System/1.0' }
+                    });
+
+                    if (geoRes.data && geoRes.data.length > 0) {
+                        const coords = {
+                            lat: parseFloat(geoRes.data[0].lat),
+                            lng: parseFloat(geoRes.data[0].lon)
+                        };
+                        
+                        await pool.query(
+                            "UPDATE users SET coordinates = ? WHERE id = ?", 
+                            [JSON.stringify(coords), user.id]
+                        );
+                        updated++;
+                        console.log(`[SRE GEO] User #${user.id} updated: ${coords.lat}, ${coords.lng}`);
+                    }
+                } catch (err) {
+                    console.error(`[SRE GEO FAIL] User #${user.id}:`, err.message);
+                }
+            }
+            
+            // Log final
+            await pool.query(
+                'INSERT INTO audit_logs (user_id, action, table_name, details) VALUES (?, "BATCH_GEOCODE", "users", ?)',
+                [req.user.id, `Geolocalização em massa: ${updated}/${users.length} processados.`]
+            );
+        })();
+
+    } catch (e) {
+        res.status(500).json({ error: "Falha ao iniciar processo em lote." });
+    }
 };

@@ -19,18 +19,20 @@ import {
     ImagePlus, Move, Trash, SlidersHorizontal, Paperclip, FileOutput,
     Files, Upload, Info, MessageSquare, StickyNote, FileEdit,
     Layout, Settings2, Code, FileDown, CheckCircle, ChevronLeft,
-    Clock
+    Clock, ToggleRight, ToggleLeft
 } from 'lucide-react';
 
+// [SIE: INICIO DA ATUALIZAÇÃO] - Interface atualizada para suportar margens estritas do PATCH
 interface VisualTemplate {
     id: number;
     name: string;
     paper: string;
-    margins: any;
+    margins: { top: number; right: number; bottom: number; left: number } | any;
     header_html: string;
     footer_html: string;
     is_default: number;
 }
+// [SIE: FIM DA ATUALIZAÇÃO]
 
 const PAPER_SIZES: Record<string, { name: string; widthCm: number; heightCm: number; }> = {
     A4: { name: 'A4 (210 x 297 mm)', widthCm: 21.0, heightCm: 29.7 },
@@ -47,8 +49,8 @@ const STATUS_LABELS: Record<DocStatus, { label: string; color: string }> = {
 };
 
 /**
- * S.I.E DocumentHub PRO V27.0
- * Protocolo SRE: Gestão Cronológica e Visual Documental Soberana
+ * S.I.E DocumentHub PRO V27.5 (Unified with SRE Paging Engine V4.5)
+ * Protocolo SRE: Gestão Cronológica, Visual Documental Soberana e Paginação Física
  */
 const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: { systemInfo: SystemInfo, currentUser: User | null, onNavigate?: (tab: string) => void, sidebarCollapsed?: boolean }) => {
     const [documents, setDocuments] = useState<OfficialDocument[]>([]);
@@ -56,7 +58,11 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
     const [activeDoc, setActiveDoc] = useState<OfficialDocument | null>(null);
     const [docStatus, setDocStatus] = useState<DocStatus>('DRAFT');
     const [isEditorOpen, setIsEditorOpen] = useState(false);
+    
+    // [SIE: ADICIONADO] Preservado do BASE para gestão de templates
     const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState<Partial<VisualTemplate> | null>(null);
+
     const [isLoading, setIsLoading] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -77,14 +83,17 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
     const [attachmentName, setAttachmentName] = useState<string>('');
     const [isAttachmentImage, setIsAttachmentImage] = useState(false);
 
-    // --- ESTADO DE MOLDES ---
-    const [editingTemplate, setEditingTemplate] = useState<Partial<VisualTemplate> | null>(null);
-
     const editorRef = useRef<HTMLDivElement>(null);
     const attachmentInputRef = useRef<HTMLInputElement>(null);
     const [zoomLevel, setZoomLevel] = useState(100);
     const [stats, setStats] = useState({ words: 0, chars: 0, pages: 1 });
     const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS'>('IDLE');
+
+    // [SIE: INICIO DA ATUALIZAÇÃO] - Estados de Configuração de Paginação SRE V4.5
+    const [repeatHeader, setRepeatHeader] = useState(true);
+    const [repeatFooter, setRepeatFooter] = useState(true);
+    const primaryColor = systemInfo.primaryColor || '#4f46e5';
+    // [SIE: FIM DA ATUALIZAÇÃO]
 
     const canManage = currentUser?.role === 'ADMIN' || currentUser?.role === 'PRESIDENT' || currentUser?.role === 'SINDIC' || currentUser?.role === 'COUNCIL';
 
@@ -147,15 +156,21 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
         return out;
     };
 
+    // [SIE: INICIO DA ATUALIZAÇÃO] - Lógica de stats atualizada para considerar repetição de cabeçalho
     const updateStats = useCallback(() => {
         if (editorRef.current) {
             const text = editorRef.current.innerText || '';
             const visual = visualTemplates.find(v => v.id === selectedVisualId);
-            const config = PAPER_SIZES[visual?.paper || 'A4'];
-            const estPages = Math.max(1, Math.ceil(editorRef.current.scrollHeight / (config.heightCm * 37.8)));
+            const config = PAPER_SIZES[visual?.paper || 'A4'] || PAPER_SIZES['A4'];
+            const pageHeightPx = config.heightCm * 37.8; 
+            const totalHeight = editorRef.current.scrollHeight;
+            // Fatores de ajuste baseados na presença de Header/Footer repetidos
+            const usefulFactor = (repeatHeader && repeatFooter) ? 0.78 : (!repeatHeader && !repeatFooter) ? 0.94 : 0.86;
+            const estPages = Math.max(1, Math.ceil(totalHeight / (pageHeightPx * usefulFactor)));
             setStats({ words: text.split(/\s+/).filter(w => w.length > 0).length, chars: text.length, pages: estPages });
         }
-    }, [selectedVisualId, visualTemplates]);
+    }, [selectedVisualId, visualTemplates, repeatHeader, repeatFooter]);
+    // [SIE: FIM DA ATUALIZAÇÃO]
 
     const handleAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -194,18 +209,23 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
                 isImage: isAttachmentImage
             });
 
+            // [SIE: INICIO DA ATUALIZAÇÃO] - Uso de appendChild (PATCH) em vez de innerHTML (BASE) para ser aditivo
             if (res.data?.text) {
-                const bodyEl = document.getElementById('document-body-zone');
-                if (bodyEl) {
-                    bodyEl.innerHTML = res.data.text;
+                if (editorRef.current) {
+                    const zone = document.createElement('div');
+                    zone.innerHTML = res.data.text;
+                    editorRef.current.appendChild(zone);
+                    updateStats();
                 } else {
-                    document.execCommand('insertHTML', false, res.data.text);
+                     // Fallback para caso o editor ainda não esteja montado (improvável neste fluxo)
+                    const bodyEl = document.getElementById('document-body-zone');
+                    if (bodyEl) bodyEl.innerHTML += res.data.text;
                 }
-                updateStats();
                 setAiChatInput('');
                 setSessionAttachment('');
                 setAttachmentName('');
             }
+            // [SIE: FIM DA ATUALIZAÇÃO]
         } catch (e) {
             alert("Erro na geração neural.");
         } finally {
@@ -227,6 +247,7 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
         finally { setIsSaving(false); }
     };
 
+    // [SIE: ADICIONADO] Mantido do BASE para funcionalidade do Modal de Templates
     const handleSaveVisualTemplate = async () => {
         if (!editingTemplate?.name) return;
         setIsSaving(true);
@@ -240,124 +261,200 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
     };
 
     const handleOpenEditor = (doc: OfficialDocument | null) => {
-        // FIX: Added 'created_at' property to the temporary document object to comply with OfficialDocument interface.
-        setActiveDoc(doc || { id: `temp_${Date.now()}`, title: '', content: '', type: 'OFICIO', status: 'DRAFT', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+        if (!doc) {
+            setActiveDoc({ id: `temp_${Date.now()}`, title: 'NOVO DOCUMENTO', content: '', type: 'OFICIO', status: 'DRAFT', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+            setDocStatus('DRAFT');
+        } else {
+            setActiveDoc(doc);
+            setDocStatus(doc.status as DocStatus);
+            if (!String(doc.id).startsWith('temp_')) loadHistory(doc.id);
+        }
+        
         setIsEditorOpen(true);
         setZoomLevel(100);
         setShowHistory(false);
-        
-        if (doc && !String(doc.id).startsWith('temp_')) loadHistory(doc.id);
 
         setTimeout(() => {
-            if (editorRef.current) {
-                const visual = visualTemplates.find(v => v.id === selectedVisualId) || visualTemplates[0];
-                if (!doc) {
-                    editorRef.current.innerHTML = `
-                        ${interpolateTemplate(visual?.header_html || "")}
-                        <div id="document-body-zone" style="min-height: 400px; padding: 20px 0;">
-                            <p>O conteúdo gerado pela IA ou digitado aparecerá aqui...</p>
-                        </div>
-                        ${interpolateTemplate(visual?.footer_html || "")}
-                    `;
-                } else {
-                    editorRef.current.innerHTML = doc.content;
-                }
+            if (editorRef.current && doc) {
+                editorRef.current.innerHTML = doc.content;
                 updateStats();
             }
         }, 100);
     };
 
-    const handleExportPDF = () => {
-        const element = document.getElementById('printable-canvas');
-        if (!element) return;
+    const handleFormat = (command: string, value?: string) => {
+        document.execCommand(command, false, value);
+    };
+
+    // [SIE: INICIO DA ATUALIZAÇÃO] - SRE PAGING ENGINE V4.5 (Lógica de Exportação do PATCH)
+    const preparePagedDOMForExport = () => {
+        if (!editorRef.current || !selectedVisualId) return null;
         
+        const visual = visualTemplates.find(v => v.id === selectedVisualId);
+        const paperConfig = PAPER_SIZES[visual?.paper || 'A4'] || PAPER_SIZES['A4'];
+        
+        const exportContainer = document.createElement('div');
+        exportContainer.className = "paged-export-root";
+        exportContainer.style.width = `${paperConfig.widthCm}cm`;
+
+        const headerHtml = interpolateTemplate(visual?.header_html || '');
+        const footerHtml = interpolateTemplate(visual?.footer_html || '');
+
+        const nodes = Array.from(editorRef.current.childNodes) as HTMLElement[];
+        
+        let currentPageIndex = 1;
+        let currentPage = createPhysicalPage(paperConfig, headerHtml, footerHtml);
+        let currentContentArea = currentPage.querySelector('.content-area') as HTMLElement;
+        exportContainer.appendChild(currentPage);
+
+        let maxHeight = paperConfig.heightCm * 37.8 * 0.76; 
+
+        nodes.forEach((node) => {
+            const clone = node.cloneNode(true) as HTMLElement;
+            currentContentArea.appendChild(clone);
+
+            if (currentContentArea.scrollHeight > maxHeight) {
+                currentContentArea.removeChild(clone);
+                currentPageIndex++;
+                
+                const hToInject = repeatHeader ? headerHtml : "";
+                const fToInject = repeatFooter ? footerHtml : "";
+                
+                currentPage = createPhysicalPage(paperConfig, hToInject, fToInject);
+                currentContentArea = currentPage.querySelector('.content-area') as HTMLElement;
+                
+                const paddingFactor = (!repeatHeader && !repeatFooter) ? 0.95 : (repeatHeader ? 0.85 : 0.92);
+                maxHeight = paperConfig.heightCm * 37.8 * paddingFactor;
+
+                currentContentArea.appendChild(clone);
+                exportContainer.appendChild(currentPage);
+            }
+        });
+
+        return exportContainer;
+    };
+
+    const createPhysicalPage = (config: any, header: string, footer: string) => {
+        const page = document.createElement('div');
+        page.className = "pdf-physical-page";
+        page.style.width = `${config.widthCm}cm`;
+        page.style.height = `${config.heightCm}cm`;
+        page.style.backgroundColor = "white";
+        page.style.display = "flex";
+        page.style.flexDirection = "column";
+        page.style.position = "relative";
+        page.style.overflow = "hidden";
+        page.style.pageBreakAfter = "always";
+        page.style.boxSizing = "border-box";
+
+        page.innerHTML = `
+            ${header ? `<div class="page-header" style="flex-shrink: 0; width: 100%;">${header}</div>` : ''}
+            <div class="content-area" style="flex-grow: 1; padding: ${header ? '1cm' : '2cm'} 2.5cm ${footer ? '1cm' : '2cm'}; overflow: hidden; font-family: 'Times New Roman', serif; text-transform: uppercase; font-size: 11pt; line-height: 1.6; text-align: justify; word-break: break-word;"></div>
+            ${footer ? `<div class="page-footer" style="flex-shrink: 0; width: 100%;">${footer}</div>` : ''}
+        `;
+        return page;
+    };
+
+    const handleExportPDF = async () => {
+        const exportDOM = preparePagedDOMForExport();
+        if (!exportDOM) return;
+        const hiddenWrapper = document.createElement('div');
+        hiddenWrapper.style.position = 'fixed';
+        hiddenWrapper.style.left = '-9999px';
+        hiddenWrapper.appendChild(exportDOM);
+        document.body.appendChild(hiddenWrapper);
+
+        const visual = visualTemplates.find(v => v.id === selectedVisualId);
         const opt = {
             margin: 0,
             filename: `${activeDoc?.title || 'documento'}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 3, useCORS: true, logging: false },
-            jsPDF: { unit: 'cm', format: currentVisual?.paper || 'a4', orientation: 'portrait' }
+            jsPDF: { unit: 'cm', format: visual?.paper.toLowerCase() || 'a4', orientation: 'portrait', compress: true }
         };
 
-        // @ts-ignore (html2pdf is global)
-        window.html2pdf().set(opt).from(element).save();
+        try {
+            // @ts-ignore
+            await window.html2pdf().set(opt).from(exportDOM).save();
+        } finally { document.body.removeChild(hiddenWrapper); }
     };
+    // [SIE: FIM DA ATUALIZAÇÃO]
 
     const currentVisual = visualTemplates.find(v => v.id === selectedVisualId) || visualTemplates[0];
-    const activeConfig = PAPER_SIZES[currentVisual?.paper || 'A4'];
+    const activeConfig = PAPER_SIZES[currentVisual?.paper || 'A4'] || PAPER_SIZES['A4'];
 
     return (
         <div className="h-full flex flex-col gap-6 animate-fade-in relative bg-slate-50">
             <input type="file" ref={attachmentInputRef} className="hidden" onChange={handleAttachment} accept="image/*,.txt,.md,.pdf" />
 
-            {/* HUB HEADER */}
-            <header className="bg-slate-900 p-8 rounded-[2.5rem] shadow-xl text-white shrink-0 overflow-hidden relative">
+            {/* HUB HEADER - Atualizado com Estilo PATCH e PrimaryColor */}
+            <header className="bg-slate-900 p-8 rounded-[3rem] shadow-xl text-white shrink-0 overflow-hidden relative flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                <div className="flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
-                    <div className="flex items-center gap-5">
-                        <div className="p-4 bg-indigo-600 rounded-2xl shadow-lg"><FileSignature size={28} /></div>
-                        <div>
-                            <h2 className="text-3xl font-black tracking-tighter uppercase leading-none">Hub de Documentos</h2>
-                            <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mt-2">Gestão Legal & Moldes SRE v27.0</p>
-                        </div>
+                <div className="flex items-center gap-6 relative z-10">
+                    <div className="p-4 bg-indigo-600 rounded-2xl shadow-lg" style={{ backgroundColor: primaryColor }}><FileSignature size={28} /></div>
+                    <div>
+                        <h2 className="text-2xl font-black tracking-tighter uppercase leading-none">Hub de Documentos</h2>
+                        <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mt-2">SRE Repositório & Paging V4.5</p>
                     </div>
-                    <div className="flex gap-4">
-                        <button onClick={() => setIsTemplateManagerOpen(true)} className="px-8 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-3 active:scale-95">
-                            <Palette size={18}/> Moldes Visuais
+                </div>
+                <div className="flex gap-4 relative z-10">
+                    <button onClick={() => setIsTemplateManagerOpen(true)} className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 active:scale-95">
+                        <Palette size={16}/> Moldes Visuais
+                    </button>
+                    {canManage && (
+                        <button onClick={() => handleOpenEditor(null)} className="px-10 py-4 bg-indigo-600 hover:bg-indigo-50 text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-2xl flex items-center gap-3 transition-all active:scale-95" style={{ backgroundColor: primaryColor }}>
+                            <Plus size={20} /> Redigir Protocolo
                         </button>
-                        {canManage && (
-                            <button onClick={() => handleOpenEditor(null)} className="px-10 py-4 bg-white text-slate-950 rounded-xl font-black text-[11px] uppercase tracking-widest shadow-2xl flex items-center gap-3 transition-all active:scale-95">
-                                <Plus size={20} /> Novo Registro
-                            </button>
-                        )}
-                    </div>
+                    )}
                 </div>
             </header>
 
-            {/* DOCUMENT GRID */}
-            <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm flex flex-1 overflow-hidden mx-2 mb-2">
-                <div className="flex-1 flex flex-col">
-                    <div className="p-8 border-b bg-slate-50/50 flex justify-between items-center shrink-0">
-                        <div className="relative w-full max-w-md">
-                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                            <input type="text" placeholder="Filtrar base documental..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-14 pr-6 h-14 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-inner outline-none uppercase" />
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{documents.length} Arquivos Protocolados</span>
-                        </div>
+            {/* DOCUMENT GRID - Estilo PATCH */}
+            <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm flex flex-1 overflow-hidden mx-2 mb-2 flex-col">
+                <div className="p-8 border-b bg-slate-50/30 flex justify-between items-center shrink-0">
+                    <div className="relative w-full max-w-md">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                        <input type="text" placeholder="Filtrar base documental..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-[11px] font-black uppercase focus:border-indigo-500 shadow-inner" />
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-                        {isLoading ? <div className="p-20 text-center"><Loader2 className="animate-spin text-indigo-600 mx-auto" size={40} /></div> : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 pb-10">
-                                {documents.filter(d => (d.title || '').toLowerCase().includes(searchTerm.toLowerCase())).map(doc => (
-                                    <div key={doc.id} onClick={() => handleOpenEditor(doc)} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 hover:border-indigo-200 cursor-pointer hover:shadow-2xl transition-all group flex flex-col min-h-[260px] relative overflow-hidden">
-                                        <div className={`absolute top-0 left-0 w-2 h-full ${doc.status === 'APPROVED' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                    <div className="flex items-center gap-4">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{documents.length} Arquivos no Ledger</span>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+                    {isLoading ? <div className="p-20 text-center"><Loader2 className="animate-spin text-indigo-600 mx-auto" size={40} style={{ color: primaryColor }} /></div> : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10">
+                            {documents.filter(d => (d.title || '').toLowerCase().includes(searchTerm.toLowerCase())).map(doc => (
+                                <div key={doc.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group flex flex-col justify-between">
+                                    <div>
                                         <div className="flex justify-between items-start mb-6">
-                                            <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all shadow-inner"><FileText size={24} /></div>
-                                            <div className={`text-[9px] font-bold px-2 py-1 rounded uppercase ${STATUS_LABELS[doc.status as DocStatus]?.color}`}>{STATUS_LABELS[doc.status as DocStatus]?.label}</div>
+                                            <div className="p-3 bg-slate-50 text-slate-400 rounded-xl group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all"><FileText size={24} /></div>
+                                            <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase border shadow-sm ${STATUS_LABELS[doc.status as DocStatus]?.color || 'bg-slate-50 text-slate-400'}`}>
+                                                {STATUS_LABELS[doc.status as DocStatus]?.label}
+                                            </span>
                                         </div>
-                                        <h3 className="text-lg font-black text-slate-800 uppercase leading-tight line-clamp-2 mb-4">{doc.title || "Sem Título"}</h3>
-                                        <div className="mt-auto flex justify-between items-center pt-4 border-t border-slate-50">
-                                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
-                                                <Clock size={12}/> {new Date(doc.updated_at).toLocaleDateString()}
-                                            </div>
-                                            <button onClick={(e) => { e.stopPropagation(); if (confirm("Remover permanentemente?")) documentService.delete(doc.id).then(loadDocuments); }} className="p-2 text-slate-300 hover:text-rose-600 transition-colors"><Trash2 size={18} /></button>
+                                        <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mb-2 leading-tight">{doc.title || "Sem Título"}</h3>
+                                        <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
+                                            <Clock size={12}/> {new Date(doc.updated_at).toLocaleDateString()}
                                         </div>
                                     </div>
-                                ))}
-                                {documents.length === 0 && (
-                                    <div className="col-span-full py-40 text-center bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
-                                        <FileEdit size={64} className="mx-auto text-slate-200 mb-6 opacity-20"/>
-                                        <p className="font-black uppercase text-[10px] text-slate-400 tracking-[0.4em]">Repositório Vazio. Nenhum registro localizado.</p>
+                                    <div className="mt-8 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                        <button onClick={() => handleOpenEditor(doc)} className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm"><Edit2 size={16}/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); if (confirm("Remover permanentemente?")) documentService.delete(doc.id).then(loadDocuments); }} className="p-3 bg-white border border-slate-200 text-slate-300 hover:text-rose-600 rounded-xl shadow-sm"><Trash2 size={16} /></button>
                                     </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                                </div>
+                            ))}
+                            {documents.length === 0 && (
+                                <div className="col-span-full py-40 text-center bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                                    <FileEdit size={64} className="mx-auto text-slate-200 mb-6 opacity-20"/>
+                                    <p className="font-black uppercase text-[10px] text-slate-400 tracking-[0.4em]">Repositório Vazio.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* TEMPLATE MANAGER MODAL */}
+            {/* [SIE: ADICIONADO] TEMPLATE MANAGER MODAL (Preservado INTEGRALMENTE do BASE) */}
             {isTemplateManagerOpen && (
                 <div className="sie-editor-overlay fixed inset-0 z-[10000] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-6xl h-[85vh] flex flex-col overflow-hidden shadow-2xl rounded-[2.5rem] border border-slate-200 animate-scale-in">
@@ -458,132 +555,112 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
                 </div>
             )}
 
-            {/* FULLSCREEN EDITOR OVERLAY */}
+            {/* [SIE: INICIO DA ATUALIZAÇÃO] - NOVO LAYOUT DO EDITOR (Baseado no PATCH com integração de Histórico do BASE) */}
             {isEditorOpen && activeDoc && (
                 <div className="sie-editor-overlay fixed inset-0 z-[9999] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-0 md:p-4 animate-fade-in">
                     <div className="bg-white w-full h-full flex flex-col overflow-hidden shadow-2xl relative transition-all duration-300 md:rounded-[2rem] max-w-[1920px]">
-                        
-                        {/* EDITOR HEADER */}
-                        <div className="h-20 px-8 bg-slate-900 text-white flex justify-between items-center shrink-0 z-50">
-                            <div className="flex items-center gap-6">
-                                <div className="p-3 bg-indigo-600 rounded-xl shadow-lg"><FileSignature size={20} /></div>
-                                <input className="font-black text-lg uppercase bg-transparent border-none outline-none p-0 w-[400px] text-white focus:ring-0" value={activeDoc.title} onChange={e => setActiveDoc({ ...activeDoc, title: e.target.value })} placeholder="Título do Documento..." />
+                        <div className="h-20 px-10 bg-slate-900 text-white flex justify-between items-center shrink-0 shadow-2xl relative z-30 border-b border-white/5">
+                            <div className="flex items-center gap-5">
+                                <div className="p-3 bg-indigo-600 rounded-xl"><FileEdit size={20}/></div>
+                                <div>
+                                    <input className="bg-transparent font-black text-lg uppercase tracking-tight outline-none w-80 focus:border-b border-white/20" value={activeDoc.title} onChange={e => setActiveDoc({...activeDoc, title: e.target.value.toUpperCase()})} />
+                                    <p className="text-[9px] text-indigo-400 font-black uppercase tracking-widest mt-0.5">SRE Ghostwriter Live Paging</p>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => window.print()} className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl transition-all" title="Imprimir"><Printer size={18} /></button>
-                                <button onClick={handleExportPDF} className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl transition-all" title="Baixar PDF SRE"><FileDown size={18} /></button>
-                                <button onClick={handleSave} disabled={isSaving} className={`px-8 py-3 ${saveStatus === 'SUCCESS' ? 'bg-emerald-600' : 'bg-indigo-600 hover:bg-indigo-500'} text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 transition-all shadow-lg active:scale-95`}>
-                                    {isSaving ? <Loader2 className="animate-spin" size={16} /> : saveStatus === 'SUCCESS' ? <CheckCircle2 size={16} /> : <Save size={16} />} Salvar Registro
+                            <div className="flex items-center gap-4">
+                                <button onClick={handleExportPDF} className="p-3 bg-white/5 hover:bg-white/10 text-white rounded-xl border border-white/10" title="Exportar PDF"><Download size={18}/></button>
+                                <select className="bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-[10px] font-black uppercase outline-none" value={docStatus} onChange={e => setDocStatus(e.target.value as DocStatus)}>
+                                    {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k} className="text-slate-900">{v.label}</option>)}
+                                </select>
+                                <button onClick={handleSave} disabled={isSaving} className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
+                                    {isSaving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} {saveStatus === 'SUCCESS' ? 'SINCRONIZADO' : 'COMMITAR'}
                                 </button>
-                                <button onClick={() => { setIsEditorOpen(false); setActiveDoc(null); }} className="p-3 hover:bg-rose-500 text-slate-400 rounded-xl transition-all"><X size={24} /></button>
+                                <button onClick={() => setIsEditorOpen(false)} className="p-3 hover:bg-rose-500 text-slate-400 rounded-xl ml-2"><X size={24}/></button>
                             </div>
                         </div>
 
-                        {/* WORKSPACE AREA */}
-                        <div className="flex-1 flex overflow-hidden bg-[#eef1f5] relative">
-                            
-                            {/* CONFIG SIDEBAR (LEFT) */}
-                            <div className="w-[450px] bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xl z-30 overflow-hidden">
-                                
-                                {/* SECTION 1: VISUAL MOLD */}
-                                <div className="p-8 border-b bg-slate-50/50 space-y-6 shrink-0">
-                                    <h4 className="text-xs font-black uppercase text-slate-900 tracking-[0.2em] flex items-center gap-3"><Palette size={18} className="text-indigo-600" /> 1. Molde Visual</h4>
-                                    <div className="grid grid-cols-1 gap-3 overflow-y-auto max-h-[250px] custom-scrollbar pr-2">
-                                        {visualTemplates.map(tpl => (
-                                            <button 
-                                                key={tpl.id} 
-                                                onClick={() => {
-                                                    setSelectedVisualId(tpl.id);
-                                                    if (editorRef.current) {
-                                                        const bodyContent = document.getElementById('document-body-zone')?.innerHTML || '<p>O conteúdo aparecerá aqui...</p>';
-                                                        editorRef.current.innerHTML = `
-                                                            ${interpolateTemplate(tpl.header_html)}
-                                                            <div id="document-body-zone" style="min-height: 400px; padding: 20px 0;">${bodyContent}</div>
-                                                            ${interpolateTemplate(tpl.footer_html)}
-                                                        `;
-                                                    }
-                                                }}
-                                                className={`p-5 rounded-[1.5rem] text-left transition-all border-2 flex items-center justify-between group ${selectedVisualId === tpl.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl scale-[1.01]' : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-400'}`}
-                                            >
-                                                <div>
-                                                    <p className="text-xs font-black uppercase leading-none">{tpl.name}</p>
-                                                    <p className={`text-[9px] mt-2 font-bold uppercase ${selectedVisualId === tpl.id ? 'text-indigo-200' : 'text-slate-400'}`}>{tpl.paper}</p>
-                                                </div>
-                                                <div className={`p-2 rounded-lg ${selectedVisualId === tpl.id ? 'bg-white/10' : 'bg-slate-50 group-hover:bg-indigo-50'} transition-all`}><Layout size={18}/></div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* INTERNAL TAB NAV */}
-                                <div className="flex bg-slate-50 p-2 shrink-0 border-b">
+                        <div className="flex-1 flex overflow-hidden bg-slate-100">
+                            {/* Toolbar & AI Side (Esquerda - Padrão PATCH) */}
+                            <div className="w-[450px] border-r bg-white flex flex-col shrink-0 overflow-y-auto custom-scrollbar z-20 shadow-xl">
+                                {/* Navegação Interna do Sidebar (Restaurada do BASE) */}
+                                <div className="flex bg-slate-50 p-2 shrink-0 border-b sticky top-0 z-50">
                                     <button onClick={() => setShowHistory(false)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!showHistory ? 'bg-white text-indigo-600 shadow-md border border-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}>Inteligência AI</button>
                                     <button onClick={() => setShowHistory(true)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showHistory ? 'bg-white text-indigo-600 shadow-md border border-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}>Versões ({docHistory.length})</button>
                                 </div>
 
-                                {/* DYNAMIC CONTENT (AI OR HISTORY) */}
-                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                                <div className="p-8 space-y-10">
                                     {!showHistory ? (
-                                        <div className="p-8 space-y-8 animate-fade-in">
-                                            <h4 className="text-xs font-black uppercase text-slate-900 tracking-[0.2em] flex items-center gap-3"><BrainCircuit size={18} className="text-indigo-600" /> 2. Inteligência de Escrita</h4>
-                                            
-                                            <div className="space-y-3">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Modelo Semântico</label>
-                                                <select 
-                                                    className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-black uppercase text-xs text-indigo-600 outline-none focus:bg-white transition-all shadow-inner appearance-none"
-                                                    value={selectedPromptId}
-                                                    onChange={e => setSelectedPromptId(e.target.value)}
-                                                >
-                                                    <option value="">LIVRE / CHAT APENAS</option>
-                                                    {savedPrompts.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                                                </select>
-                                            </div>
-
-                                            <div className={`p-6 rounded-[2.5rem] border-2 border-dashed transition-all ${sessionAttachment ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
-                                                <div className="flex justify-between items-center mb-4">
-                                                    <span className="text-[9px] font-black uppercase text-slate-500 flex items-center gap-2"><Paperclip size={14} className="text-indigo-500"/> Anexo de Referência</span>
-                                                    {sessionAttachment && <button onClick={() => {setSessionAttachment(''); setAttachmentName('');}} className="text-rose-600 hover:underline text-[9px] font-black uppercase">Limpar</button>}
-                                                </div>
-                                                {sessionAttachment ? (
-                                                    <div className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-emerald-100">
-                                                        {isAttachmentImage ? <ImageIcon size={24} className="text-emerald-600"/> : <FileText size={24} className="text-emerald-600"/>}
-                                                        <p className="text-[10px] font-black text-emerald-800 truncate flex-1 uppercase tracking-tight">{attachmentName}</p>
-                                                        <CheckCircle2 size={16} className="text-emerald-500"/>
+                                        <>
+                                            <div className="space-y-6">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Sparkles size={14} className="text-indigo-600"/> Assistente Neural</h4>
+                                                <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-200 space-y-4">
+                                                    <div className="space-y-2">
+                                                         <select className="w-full h-12 bg-white border border-slate-200 rounded-xl px-4 text-[10px] font-black uppercase outline-none" value={selectedPromptId} onChange={e => setSelectedPromptId(e.target.value)}>
+                                                            <option value="">Chat Livre</option>
+                                                            {savedPrompts.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                                                        </select>
                                                     </div>
-                                                ) : (
-                                                    <button onClick={() => attachmentInputRef.current?.click()} className="w-full py-5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-indigo-600 hover:bg-indigo-50 transition-all flex items-center justify-center gap-3 shadow-sm group active:scale-95">
-                                                        <UploadCloud size={18} className="group-hover:scale-110 transition-transform" /> Carregar Origem
-                                                    </button>
-                                                )}
+                                                    <textarea rows={4} className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-xs font-medium uppercase outline-none focus:border-indigo-500" placeholder="Instrua a IA..." value={aiChatInput} onChange={e => setAiChatInput(e.target.value)} />
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => attachmentInputRef.current?.click()} className={`flex-1 py-3 border rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all ${sessionAttachment ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
+                                                            <Paperclip size={14}/> {attachmentName ? attachmentName.slice(0, 10) + '...' : 'Anexar Base'}
+                                                        </button>
+                                                        <input type="file" ref={attachmentInputRef} className="hidden" onChange={handleAttachment} />
+                                                        <button onClick={handleGenerate} disabled={isGenerating} className="flex-[1.5] py-3 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase shadow-lg hover:bg-indigo-600 transition-all flex items-center justify-center gap-2">
+                                                            {isGenerating ? <Loader2 size={14} className="animate-spin"/> : <BrainCircuit size={14}/>} Gerar Estrutura
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
 
-                                            <div className="space-y-3">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Instruções Ghostwriter</label>
-                                                <textarea 
-                                                    rows={6} 
-                                                    className="w-full bg-slate-50 border border-slate-200 rounded-[2rem] p-8 text-sm font-medium uppercase leading-relaxed outline-none focus:bg-white focus:border-indigo-500 transition-all shadow-inner placeholder:text-slate-300" 
-                                                    placeholder="Ex: Redija um ofício sobre manutenção de via... Use os dados do anexo." 
-                                                    value={aiChatInput} 
-                                                    onChange={e => setAiChatInput(e.target.value)} 
-                                                />
+                                            <div className="space-y-4">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Settings2 size={14}/> Config. de Impressão (SRE)</h4>
+                                                <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-200 space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black uppercase text-slate-500">Repetir Cabeçalho</span>
+                                                        <button onClick={() => { setRepeatHeader(!repeatHeader); setTimeout(updateStats, 100); }} className={`transition-all ${repeatHeader ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                            {repeatHeader ? <ToggleRight size={32}/> : <ToggleLeft size={32}/>}
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black uppercase text-slate-500">Repetir Rodapé</span>
+                                                        <button onClick={() => { setRepeatFooter(!repeatFooter); setTimeout(updateStats, 100); }} className={`transition-all ${repeatFooter ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                            {repeatFooter ? <ToggleRight size={32}/> : <ToggleLeft size={32}/>}
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
 
-                                            <button 
-                                                onClick={handleGenerate} 
-                                                disabled={isGenerating || (!aiChatInput.trim() && !selectedPromptId)} 
-                                                className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] hover:bg-indigo-600 flex items-center justify-center gap-4 shadow-2xl active:scale-95 transition-all group"
-                                            >
-                                                {isGenerating ? <Loader2 className="animate-spin" size={24} /> : <Sparkles size={24} className="text-amber-400 group-hover:rotate-12 transition-transform" />} 
-                                                Gerar Conteúdo AI
-                                            </button>
-                                        </div>
+                                            <div className="space-y-4">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileEdit size={14}/> Editor Tático</h4>
+                                                <div className="grid grid-cols-5 gap-2">
+                                                    <button onClick={() => handleFormat('bold')} className="p-3 bg-slate-50 rounded-lg hover:bg-indigo-50"><Bold size={16}/></button>
+                                                    <button onClick={() => handleFormat('italic')} className="p-3 bg-slate-50 rounded-lg hover:bg-indigo-50"><Italic size={16}/></button>
+                                                    <button onClick={() => handleFormat('underline')} className="p-3 bg-slate-50 rounded-lg hover:bg-indigo-50"><Underline size={16}/></button>
+                                                    <button onClick={() => handleFormat('justifyCenter')} className="p-3 bg-slate-50 rounded-lg hover:bg-indigo-50"><AlignCenter size={16}/></button>
+                                                    <button onClick={() => handleFormat('justifyFull')} className="p-3 bg-slate-50 rounded-lg hover:bg-indigo-50"><AlignJustify size={16}/></button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-6">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Layout size={14}/> Aparência & Papel</h4>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {visualTemplates.map(tpl => (
+                                                        <button key={tpl.id} onClick={() => setSelectedVisualId(tpl.id)} className={`p-4 rounded-2xl border text-left transition-all ${selectedVisualId === tpl.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-indigo-200'}`}>
+                                                            <p className="text-[10px] font-black uppercase">{tpl.name}</p>
+                                                            <p className="text-[8px] font-bold mt-1 opacity-60">{tpl.paper}</p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </>
                                     ) : (
-                                        <div className="p-8 space-y-4 animate-fade-in">
-                                            <h4 className="text-xs font-black uppercase text-slate-900 tracking-[0.2em] flex items-center gap-3 mb-6"><History size={18} className="text-indigo-600" /> Cronologia do Registro</h4>
+                                        <div className="space-y-4 animate-fade-in">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Cronologia do Registro</h4>
                                             {docHistory.map((version, vIdx) => (
                                                 <button 
                                                     key={version.id} 
-                                                    onClick={() => { if(confirm("Restaurar esta versão? Alterações não salvas serão perdidas.")) editorRef.current!.innerHTML = version.content; }}
+                                                    onClick={() => { if(confirm("Restaurar esta versão? Alterações não salvas serão perdidas.")) { if(editorRef.current) editorRef.current.innerHTML = version.content; updateStats(); } }}
                                                     className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] text-left hover:border-indigo-500 hover:bg-indigo-50/30 transition-all group"
                                                 >
                                                     <div className="flex justify-between items-start mb-2">
@@ -605,65 +682,67 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
                                 </div>
                             </div>
 
-                            {/* EDITOR CANVAS (RIGHT) */}
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-12 flex flex-col items-center">
-                                
-                                {/* FLOATING TOOLBAR */}
-                                <div className="bg-white/90 backdrop-blur-xl px-8 py-3 rounded-2xl shadow-2xl border border-white/20 mb-12 flex items-center gap-6 print-hidden sticky top-0 z-40 transition-all hover:scale-[1.02]">
-                                    <div className="flex items-center gap-2 border-r border-slate-100 pr-6">
-                                        <button onClick={() => setZoomLevel(z => Math.max(50, z - 10))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><Minus size={16}/></button>
-                                        <span className="text-[11px] font-black w-12 text-center text-slate-800">{zoomLevel}%</span>
-                                        <button onClick={() => setZoomLevel(z => Math.min(200, z + 10))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><PlusIcon size={16}/></button>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => document.execCommand('bold')} className="p-3 hover:bg-slate-100 rounded-xl transition-all" title="Negrito"><Bold size={18}/></button>
-                                        <button onClick={() => document.execCommand('italic')} className="p-3 hover:bg-slate-100 rounded-xl transition-all" title="Itálico"><Italic size={18}/></button>
-                                        <button onClick={() => document.execCommand('underline')} className="p-3 hover:bg-slate-100 rounded-xl transition-all" title="Sublinhado"><Underline size={18}/></button>
-                                    </div>
-                                    <div className="flex items-center gap-2 border-l border-slate-100 pl-6">
-                                        <button onClick={() => document.execCommand('justifyLeft')} className="p-3 hover:bg-slate-100 rounded-xl transition-all"><AlignLeft size={18}/></button>
-                                        <button onClick={() => document.execCommand('justifyCenter')} className="p-3 hover:bg-slate-100 rounded-xl transition-all"><AlignCenter size={18}/></button>
-                                        <button onClick={() => document.execCommand('justifyFull')} className="p-3 hover:bg-slate-100 rounded-xl transition-all"><AlignJustify size={18}/></button>
+                            {/* Canvas Zone (Direita - Padrão PATCH com Visual Paging) */}
+                            <div className="flex-1 overflow-y-auto bg-slate-200 p-10 flex flex-col items-center custom-scrollbar relative">
+                                <div className="sticky top-0 right-0 w-full flex justify-end z-50 mb-6 print-hidden">
+                                    <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-xl shadow-lg border border-white/20">
+                                        <button onClick={() => setZoomLevel(Math.max(30, zoomLevel - 10))} className="p-2 hover:bg-slate-100 rounded-lg"><ZoomOut size={16}/></button>
+                                        <span className="px-4 flex items-center text-[10px] font-black text-slate-600">{zoomLevel}%</span>
+                                        <button onClick={() => setZoomLevel(Math.min(150, zoomLevel + 10))} className="p-2 hover:bg-slate-100 rounded-lg"><ZoomIn size={16}/></button>
                                     </div>
                                 </div>
 
-                                <div 
-                                    id="printable-canvas" 
-                                    className="relative transition-all duration-300 origin-top shadow-[0_40px_100px_rgba(0,0,0,0.12)] bg-white border border-slate-200"
-                                    style={{ 
-                                        transform: `scale(${zoomLevel / 100})`,
-                                        width: `${activeConfig.widthCm}cm`,
-                                        minHeight: `${activeConfig.heightCm}cm`,
-                                        padding: `${currentVisual?.margins?.top || 2}cm ${currentVisual?.margins?.right || 2}cm ${currentVisual?.margins?.bottom || 2}cm ${currentVisual?.margins?.left || 2.5}cm`,
-                                        backgroundImage: `linear-gradient(to bottom, transparent 0, transparent ${activeConfig.heightCm}cm, #cbd5e1 ${activeConfig.heightCm}cm, #cbd5e1 ${activeConfig.heightCm + 1.0}cm)`,
-                                        backgroundSize: `100% ${activeConfig.heightCm + 1.0}cm`
-                                    }}
-                                >
-                                    <div 
-                                        ref={editorRef} 
-                                        contentEditable
-                                        suppressContentEditableWarning 
-                                        onInput={updateStats} 
-                                        className="outline-none cursor-text text-slate-950 overflow-visible min-h-full"
-                                        style={{
-                                            fontFamily: '"Times New Roman", Times, serif',
-                                            fontSize: '12pt',
-                                            lineHeight: '1.6',
-                                            textAlign: 'justify'
-                                        }} 
-                                    />
-
-                                    {Array.from({ length: stats.pages }).map((_, i) => (
-                                        <div key={i} className="absolute right-[-80px] text-[10px] font-black text-slate-400 bg-white/50 border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm print-hidden" style={{ top: `${(activeConfig.heightCm + 1.0) * i + 1}cm` }}>PÁGINA {i + 1}</div>
-                                    ))}
+                                <div className="relative transition-all duration-300 origin-top flex flex-col gap-10" style={{ transform: `scale(${zoomLevel / 100})` }}>
+                                    {/* Lógica de Renderização Visual de Páginas do PATCH */}
+                                    {Array.from({ length: stats.pages }).map((_, i) => {
+                                        const isFirst = i === 0;
+                                        const showH = isFirst || repeatHeader;
+                                        const showF = isFirst || repeatFooter;
+                                        const paperW = PAPER_SIZES[visualTemplates.find(v => v.id === selectedVisualId)?.paper || 'A4']?.widthCm || 21;
+                                        const paperH = PAPER_SIZES[visualTemplates.find(v => v.id === selectedVisualId)?.paper || 'A4']?.heightCm || 29.7;
+                                        
+                                        return (
+                                            <div key={i} className="bg-white shadow-[0_40px_100px_rgba(0,0,0,0.1)] relative" style={{ width: `${paperW}cm`, height: `${paperH}cm` }}>
+                                                {showH && <header className="pointer-events-none" dangerouslySetInnerHTML={{ __html: interpolateTemplate(visualTemplates.find(v => v.id === selectedVisualId)?.header_html || '') }} />}
+                                                {isFirst && (
+                                                    <div 
+                                                        id="document-body-zone"
+                                                        ref={editorRef}
+                                                        contentEditable
+                                                        suppressContentEditableWarning
+                                                        className="absolute inset-0 px-20 outline-none text-slate-800 text-[11pt] font-medium leading-[1.6] uppercase text-justify"
+                                                        onInput={updateStats}
+                                                        style={{ 
+                                                            fontFamily: "'Times New Roman', serif", 
+                                                            height: 'auto', 
+                                                            minHeight: '100%', 
+                                                            paddingTop: showH ? '4cm' : '2cm',
+                                                            paddingBottom: showF ? '4cm' : '2cm',
+                                                            // Stacking Context Trick para permitir edição contínua sobre múltiplas páginas visuais
+                                                            overflow: 'visible'
+                                                        }}
+                                                    />
+                                                )}
+                                                {showF && <footer className="absolute bottom-0 left-0 w-full pointer-events-none" dangerouslySetInnerHTML={{ __html: interpolateTemplate(visualTemplates.find(v => v.id === selectedVisualId)?.footer_html || '') }} />}
+                                                <div className="absolute right-[-80px] top-4 text-[9px] font-black text-slate-300 bg-slate-50 px-2 py-1 rounded print-hidden">PÁGINA {i+1}</div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
+                                <div className="h-20 shrink-0" />
+                            </div>
+                        </div>
 
-                                <div className="h-40 shrink-0 print-hidden" />
+                        <div className="h-14 px-10 bg-white border-t border-slate-200 flex justify-between items-center shrink-0 shadow-inner">
+                            <div className="flex gap-6">
+                                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-600 rounded-full"/> <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{stats.words} PALAVRAS</span></div>
+                                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-indigo-600 rounded-full"/> <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{stats.pages} PÁGINAS ESTIMADAS</span></div>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
+            {/* [SIE: FIM DA ATUALIZAÇÃO] */}
 
             <style>{`
                 [contenteditable] p { margin-bottom: 14pt; }
@@ -678,28 +757,7 @@ const DocumentHub = ({ systemInfo, currentUser, onNavigate, sidebarCollapsed }: 
                         display: none !important; 
                         visibility: hidden !important;
                     }
-                    .sie-editor-overlay { 
-                        position: absolute !important; 
-                        top: 0 !important; 
-                        left: 0 !important; 
-                        width: 100% !important; 
-                        height: auto !important; 
-                        background: white !important; 
-                        display: block !important;
-                    }
-                    #printable-canvas { 
-                        position: absolute !important; 
-                        top: 0 !important; 
-                        left: 0 !important; 
-                        width: ${activeConfig.widthCm}cm !important; 
-                        padding: ${currentVisual?.margins?.top || 2}cm ${currentVisual?.margins?.right || 2}cm ${currentVisual?.margins?.bottom || 2}cm ${currentVisual?.margins?.left || 2.5}cm !important;
-                        box-shadow: none !important; 
-                        border: none !important;
-                        transform: none !important;
-                        visibility: visible !important;
-                        background: white !important;
-                    }
-                    #printable-canvas * { visibility: visible !important; }
+                    /* SRE Export Hide Logic */
                 }
             `}</style>
         </div>

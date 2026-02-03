@@ -1,3 +1,4 @@
+
 import express from 'express';
 import { body, param } from 'express-validator';
 import * as userController from '../controllers/userController.js';
@@ -22,6 +23,13 @@ router.post('/search-neural',
     ],
     validate,
     userController.searchNeural
+);
+
+// SRE Tool: Batch Geocoding (Admin Only)
+router.post('/batch-geocode', 
+    authenticateToken, 
+    checkPermission('manage_settings'), 
+    userController.batchGeocode
 );
 
 // Self-Service Profile

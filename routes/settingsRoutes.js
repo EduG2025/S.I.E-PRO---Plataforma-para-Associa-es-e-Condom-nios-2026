@@ -8,7 +8,6 @@ const router = express.Router();
 
 const parseSystemConfig = (settings) => {
     if (!settings) return {};
-    // Fusão: Adicionado 'dictionary' do Passo 2 à lista de campos JSON do Passo 1
     const jsonFields = ['resident_ui_settings', 'whatsapp_config', 'coordinates', 'module_metadata', 'dictionary'];
 
     jsonFields.forEach(field => {
@@ -34,6 +33,30 @@ router.get('/time', (req, res) => {
     });
 });
 
+// --- SRE REMOTE KILL SWITCH ---
+router.post('/toggle-license', authenticateToken, async (req, res) => {
+    // Apenas ADMIN MASTER (ID 0) ou Usuários com Role ADMIN real podem executar isso
+    if (req.user.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'SRE_MASTER_REQUIRED' });
+    }
+
+    const { status } = req.body; // 'ACTIVE' or 'SUSPENDED'
+    if (!['ACTIVE', 'SUSPENDED'].includes(status)) {
+        return res.status(400).json({ error: 'INVALID_STATUS' });
+    }
+
+    try {
+        await pool.query('UPDATE settings SET license_status = ? WHERE id = 1', [status]);
+        await pool.query(
+            'INSERT INTO audit_logs (user_id, action, table_name, details) VALUES (?, "LICENSE_TOGGLE", "settings", ?)',
+            [req.user.id, `Status alterado para: ${status}`]
+        );
+        res.json({ success: true, new_status: status });
+    } catch (e) {
+        res.status(500).json({ error: 'DB_ERROR' });
+    }
+});
+
 router.get('/ai-keys', authenticateToken, checkPermission('manage_ai_keys'), aiKeysHandlers.getAll);
 router.post('/ai-keys', authenticateToken, checkPermission('manage_ai_keys'), aiKeysHandlers.create);
 router.put('/ai-keys/:id', authenticateToken, checkPermission('manage_ai_keys'), aiKeysHandlers.update);
@@ -47,10 +70,6 @@ router.put('/wiki/:id', authenticateToken, checkPermission('manage_settings'), w
 router.delete('/wiki/:id', authenticateToken, checkPermission('manage_settings'), wikiHandlers.delete);
 
 // --- STUDIO TOKENS ENGINE ---
-/** 
- * SRE FIX: Rota de leitura (GET) tornada pública para permitir que a tela de login 
- * e componentes públicos carreguem o branding correto. 
- */
 router.get('/studio-tokens', async (req, res) => {
     try {
         const [[tokens]] = await pool.query("SELECT * FROM studio_tokens WHERE id = 1");
@@ -95,7 +114,6 @@ router.get('/studio-tokens', async (req, res) => {
     }
 });
 
-// A escrita (POST) permanece bloqueada para ADMIN
 router.post('/studio-tokens', authenticateToken, checkPermission('manage_settings'), async (req, res) => {
     try {
         const config = req.body;
@@ -208,7 +226,6 @@ router.get('/system', async (req, res) => {
 
 router.put('/system', authenticateToken, checkPermission('manage_settings'), async (req, res) => {
     try {
-        // Fusão: Lista combinada do Passo 1 e Passo 2
         const allowed = [
             'name', 'shortName', 'cnpj', 'address', 'email', 'phone', 'website', 
             'primaryColor', 'registrationMode', 'logoUrl', 'resident_ui_settings', 

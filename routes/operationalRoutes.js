@@ -23,7 +23,8 @@ const otherModules = [
     { path: 'agenda', table: 'agenda', viewPerm: 'view_timeline', managePerm: 'manage_operations' },
     { path: 'projects', table: 'projects', viewPerm: 'view_projects', managePerm: 'manage_projects' },
     { path: 'assets', table: 'assets', viewPerm: 'view_operations', managePerm: 'manage_users' },
-    { path: 'cameras', table: 'cameras', viewPerm: 'view_operations', managePerm: 'manage_settings' }
+    { path: 'cameras', table: 'cameras', viewPerm: 'view_operations', managePerm: 'manage_settings' },
+    { path: 'vehicles', table: 'vehicles', viewPerm: 'view_operations', managePerm: 'manage_users' } 
 ];
 
 otherModules.forEach(m => {

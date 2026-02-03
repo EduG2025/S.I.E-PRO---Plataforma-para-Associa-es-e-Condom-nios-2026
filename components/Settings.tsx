@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { SystemInfo, WhatsAppConfig, AIKey, DualDesignSystem, FinancialRecord } from '../types';
 import { systemService, aiKeyService, api, planService } from '../services/api';
 import { SYSTEM_PERMISSIONS, MENU_ITEMS } from '../constants';
@@ -11,7 +12,7 @@ import {
     Gift, ReceiptText, Crosshair, Server, Database, MessageSquare, Workflow, Camera, Code, RotateCcw,
     Activity, Eye, EyeOff, ClipboardList, PenTool, Globe2, Sparkles, LayoutGrid, LocateFixed, BookOpen,
     Navigation, AlertTriangle, Info, MapPin as PinIcon, RefreshCw, Activity as PulseIcon,
-    CreditCard, ArrowRight
+    CreditCard, ArrowRight, Search, Satellite, Map as MapIcon2, PauseCircle, PlayCircle
 } from 'lucide-react';
 import StudioLab from './StudioLab';
 import WikiHub from './WikiHub';
@@ -22,23 +23,71 @@ import 'leaflet/dist/leaflet.css';
 // --- COMPONENTES AUXILIARES (LEAFLET MAP) ---
 const MapContainerAny = MapContainer as any;
 const TileLayerAny = TileLayer as any;
+const MarkerAny = Marker as any;
 
-const MapEvents = ({ onLocationSelect }: { onLocationSelect: (latlng: any) => void }) => {
-    useMapEvents({
+const MapEvents = ({ onLocationSelect, setPosition }: { onLocationSelect: (latlng: any) => void, setPosition: (pos: any) => void }) => {
+    const map = useMapEvents({
         click(e: any) {
             onLocationSelect(e.latlng);
         }
     });
+    useEffect(() => { }, [map]);
     return null;
 };
 
 const MapModal = ({ initialCoords, onClose, onSave }: any) => {
     const [position, setPosition] = useState(initialCoords || { lat: -23.5505, lng: -46.6333 });
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [mapStyle, setMapStyle] = useState<'STREET' | 'SATELLITE'>('STREET');
+    
+    const mapRef = useRef<any>(null);
+    const markerRef = useRef<any>(null);
+
+    const handleSearch = async () => {
+        if (!searchQuery.trim()) return;
+        setIsSearching(true);
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`);
+            const data = await res.json();
+            setSearchResults(data);
+        } catch (e) {
+            alert("Erro ao buscar endereço.");
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const selectLocation = (lat: number, lon: number) => {
+        const newPos = { lat, lng: lon };
+        setPosition(newPos);
+        setSearchResults([]);
+        if (mapRef.current) {
+            mapRef.current.flyTo([lat, lon], 18, { duration: 1.5 });
+        }
+    };
+
+    const updatePosition = (latlng: { lat: number, lng: number }) => {
+        setPosition(latlng);
+    };
+
+    const eventHandlers = useMemo(
+        () => ({
+            dragend() {
+                const marker = markerRef.current;
+                if (marker) {
+                    updatePosition(marker.getLatLng());
+                }
+            },
+        }),
+        [],
+    );
 
     return (
         <div className="fixed inset-0 bg-slate-950/90 z-[9999] flex items-center justify-center p-6 backdrop-blur-xl animate-fade-in">
             <div className="bg-white rounded-[3rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] w-full max-w-5xl h-[85vh] flex flex-col relative overflow-hidden animate-scale-in border border-white/10">
-                <div className="h-24 px-10 border-b bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="h-24 px-10 border-b bg-slate-900 text-white flex justify-between items-center shrink-0 relative z-20">
                     <div className="flex items-center gap-6">
                         <div className="p-4 bg-rose-600 rounded-2xl shadow-xl animate-pulse"><PinIcon size={28} /></div>
                         <div>
@@ -48,21 +97,91 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
                     </div>
                     <button onClick={onClose} className="p-4 hover:bg-rose-500 rounded-2xl transition-all text-slate-400 hover:text-white"><X size={32} /></button>
                 </div>
+                
                 <div className="flex-1 relative z-0 overflow-hidden bg-slate-100">
+                    {/* BARRA DE PESQUISA FLUTUANTE */}
+                    <div className="absolute top-6 left-6 z-[1000] w-full max-w-md">
+                        <div className="relative group">
+                            <div className="absolute inset-0 bg-white/80 rounded-2xl blur-lg shadow-xl opacity-0 group-hover:opacity-100 transition-all"></div>
+                            <div className="relative flex bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
+                                <input 
+                                    type="text" 
+                                    className="flex-1 pl-6 pr-4 py-4 text-xs font-black uppercase outline-none text-slate-700 placeholder:text-slate-300"
+                                    placeholder="PESQUISAR ENDEREÇO OU COORDENADA..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                                />
+                                <button 
+                                    onClick={handleSearch}
+                                    disabled={isSearching}
+                                    className="px-6 bg-slate-900 text-white hover:bg-indigo-600 transition-colors"
+                                >
+                                    {isSearching ? <Loader2 size={18} className="animate-spin"/> : <Search size={18}/>}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {searchResults.length > 0 && (
+                            <div className="mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-slide-down max-h-60 overflow-y-auto custom-scrollbar">
+                                {searchResults.map((res: any, idx) => (
+                                    <button 
+                                        key={idx}
+                                        onClick={() => selectLocation(parseFloat(res.lat), parseFloat(res.lon))}
+                                        className="w-full text-left p-4 hover:bg-indigo-50 border-b border-slate-100 last:border-0 transition-colors group"
+                                    >
+                                        <p className="text-[10px] font-black uppercase text-slate-700 group-hover:text-indigo-700 line-clamp-1">{res.display_name.split(',')[0]}</p>
+                                        <p className="text-[9px] text-slate-400 mt-1 truncate">{res.display_name}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* CONTROLE DE CAMADAS */}
+                    <div className="absolute top-6 right-6 z-[1000] flex bg-white/90 backdrop-blur rounded-2xl p-1 shadow-2xl border border-slate-200">
+                        <button 
+                            onClick={() => setMapStyle('STREET')} 
+                            className={`p-3 rounded-xl transition-all ${mapStyle === 'STREET' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-600'}`}
+                            title="Mapa de Rua"
+                        >
+                            <MapIcon2 size={18}/>
+                        </button>
+                        <button 
+                            onClick={() => setMapStyle('SATELLITE')} 
+                            className={`p-3 rounded-xl transition-all ${mapStyle === 'SATELLITE' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-600'}`}
+                            title="Satélite"
+                        >
+                            <Satellite size={18}/>
+                        </button>
+                    </div>
+
                     <MapContainerAny
                         center={[position.lat, position.lng]}
                         zoom={16}
                         style={{ height: '100%', width: '100%' }}
                         zoomControl={false}
+                        ref={mapRef}
                     >
-                        <TileLayerAny url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                        <Marker position={[position.lat, position.lng]} />
-                        <MapEvents onLocationSelect={(latlng: any) => setPosition({ lat: latlng.lat, lng: latlng.lng })} />
+                        <TileLayerAny 
+                            url={mapStyle === 'STREET' 
+                                ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                            } 
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        />
+                        <MarkerAny 
+                            position={[position.lat, position.lng]} 
+                            draggable={true}
+                            eventHandlers={eventHandlers}
+                            ref={markerRef}
+                        />
+                        <MapEvents onLocationSelect={(latlng: any) => updatePosition(latlng)} setPosition={setPosition} />
                     </MapContainerAny>
 
-                    <div className="absolute top-6 right-6 z-[1000] bg-slate-900/90 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 text-white shadow-2xl space-y-4">
+                    <div className="absolute bottom-6 right-6 z-[1000] bg-slate-900/90 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 text-white shadow-2xl space-y-4">
                         <div className="flex items-center gap-3 border-b border-white/5 pb-3">
-                            <Crosshair size={18} className="text-rose-500" />
+                            <Crosshair size={18} className="text-rose-500 animate-pulse" />
                             <span className="text-[10px] font-black uppercase tracking-widest">Coordenadas Atuais</span>
                         </div>
                         <div className="space-y-1">
@@ -75,12 +194,17 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
                         </div>
                     </div>
                 </div>
-                <div className="h-24 px-10 border-t bg-slate-50 flex justify-between items-center shrink-0">
+                
+                <div className="h-24 px-10 border-t bg-slate-50 flex justify-between items-center shrink-0 relative z-20">
                     <div className="flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none italic">Clique no mapa para realocar o marcador</span>
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none italic">
+                            Arraste o marcador ou use a busca para precisão cirúrgica.
+                        </span>
                     </div>
-                    <button onClick={() => onSave(position)} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all active:scale-95">Salvar Georreferenciamento</button>
+                    <button onClick={() => onSave(position)} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all active:scale-95 flex items-center gap-2">
+                        <Save size={16}/> Salvar Georreferenciamento
+                    </button>
                 </div>
             </div>
         </div>
@@ -115,10 +239,11 @@ interface SettingsProps {
     onUpdateSystemInfo: (info: SystemInfo) => void;
     designSystem: DualDesignSystem;
     setDesignSystem: React.Dispatch<React.SetStateAction<DualDesignSystem | null>>;
+    currentUser: any;
 }
 
 // --- COMPONENTE PRINCIPAL ---
-const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSystem }: SettingsProps) => {
+const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSystem, currentUser }: SettingsProps) => {
     // -- TABS & NAVIGATION --
     const [activeTab, setActiveTab] = useState<'INFO' | 'STUDIO' | 'AI_PROVIDERS' | 'SUBSCRIPTIONS' | 'PERMISSIONS' | 'WIKI'>('INFO');
 
@@ -128,6 +253,9 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isSearchingCEP, setIsSearchingCEP] = useState(false);
     const [isLocatingGPS, setIsLocatingGPS] = useState(false);
+    
+    // -- STATES (BATCH TOOLS) --
+    const [isBatchRunning, setIsBatchRunning] = useState(false);
 
     // -- STATES (MODALS & FEATURES) --
     const [isMapModalOpen, setIsMapModalOpen] = useState(false);
@@ -164,13 +292,27 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     const [metadata, setMetadata] = useState<any>((systemInfo as any)?.module_metadata || {});
 
     // -- EFFECTS --
+    
+    // SRE CORE: Hydrate Settings with FULL DATA (Authenticated Fetch)
+    // A prop systemInfo vem de uma rota pública (filtrada).
+    // Aqui buscamos o objeto completo para edição administrativa.
     useEffect(() => {
-        if (systemInfo) {
-            setLocalInfo(systemInfo);
-            if (systemInfo.whatsapp_config) setWaConfig(systemInfo.whatsapp_config);
-            if ((systemInfo as any).module_metadata) setMetadata((systemInfo as any).module_metadata);
-        }
-    }, [systemInfo]);
+        const loadFullSettings = async () => {
+            try {
+                const res = await systemService.getInfo();
+                if (res.data) {
+                    setLocalInfo(prev => ({ ...prev, ...res.data }));
+                    if (res.data.whatsapp_config) setWaConfig(res.data.whatsapp_config);
+                    if (res.data.module_metadata) setMetadata(res.data.module_metadata);
+                }
+            } catch (e) {
+                console.error("[SRE] Full settings hydration failed:", e);
+                // Fallback para prop se o fetch falhar
+                setLocalInfo(systemInfo);
+            }
+        };
+        loadFullSettings();
+    }, []);
 
     // Handlers de Carregamento
     const loadAiKeys = useCallback(async () => {
@@ -209,6 +351,30 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     }, [activeTab, loadRBAC, loadAiKeys, loadPlans]);
 
     // -- LOGIC HANDLERS --
+
+    const handleBatchGeocode = async () => {
+        if (!confirm("Esta ação irá processar em segundo plano as coordenadas para todos os membros com endereço cadastrado, mas sem geolocalização. Isso pode levar alguns minutos. Continuar?")) return;
+        setIsBatchRunning(true);
+        try {
+            const res = await api.post('/users/batch-geocode');
+            alert(`✅ ${res.data.message}`);
+        } catch (e) {
+            alert("Erro ao iniciar processo de geolocalização em massa.");
+        } finally {
+            setIsBatchRunning(false);
+        }
+    };
+
+    const handleToggleLicense = async (status: 'ACTIVE' | 'SUSPENDED') => {
+        if (!confirm(`TEM CERTEZA? Isso irá ${status === 'SUSPENDED' ? 'BLOQUEAR' : 'DESBLOQUEAR'} o acesso de todos os usuários.`)) return;
+        try {
+            await api.post('/settings/toggle-license', { status });
+            alert(`Licença atualizada para: ${status}. O sistema será recarregado.`);
+            window.location.reload();
+        } catch (e) {
+            alert("Falha ao atualizar licença.");
+        }
+    };
 
     const handleGetGPSLocation = () => {
         if (!navigator.geolocation) {
@@ -397,6 +563,27 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                 {/* ABA: IDENTIDADE */}
                 {activeTab === 'INFO' && (
                     <div className="space-y-12 animate-fade-in max-w-6xl mx-auto pb-20">
+                        {/* PAINEL DE CONTROLE REMOTO SRE (APENAS MASTER) */}
+                        {currentUser?.role === 'ADMIN' && (
+                            <div className="bg-slate-900 rounded-[3.5rem] p-8 border border-white/10 shadow-xl flex items-center justify-between">
+                                <div className="flex items-center gap-4 text-white">
+                                    <ShieldAlert size={28} className="text-rose-500"/>
+                                    <div>
+                                        <h3 className="text-sm font-black uppercase tracking-widest">Controle de Soberania (Kill Switch)</h3>
+                                        <p className="text-[10px] text-slate-400 uppercase tracking-widest">Gerenciamento remoto de licença de uso.</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-4">
+                                    <button onClick={() => handleToggleLicense('SUSPENDED')} className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
+                                        <PauseCircle size={16}/> Suspender
+                                    </button>
+                                    <button onClick={() => handleToggleLicense('ACTIVE')} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
+                                        <PlayCircle size={16}/> Ativar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="bg-white p-12 rounded-[3.5rem] border border-slate-200 shadow-sm space-y-12">
                             <h3 className="text-lg font-black text-slate-800 uppercase tracking-widest flex items-center gap-4 border-b pb-8">
                                 <Building size={24} style={{ color: primaryColor }} /> Identidade do Cluster
@@ -483,21 +670,22 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     <input maxLength={2} className="w-full font-black h-16 bg-slate-50 border border-slate-200 rounded-3xl px-8 uppercase shadow-sm" value={localInfo?.state || ''} onChange={e => setLocalInfo({ ...localInfo, state: e.target.value.toUpperCase() })} />
                                 </div>
                             </div>
-
-                            {localInfo.coordinates && (
-                                <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[3rem] flex items-center justify-between shadow-inner">
-                                    <div className="flex items-center gap-6">
-                                        <div className="p-4 bg-white rounded-2xl text-indigo-600 shadow-sm"><Navigation size={28} /></div>
-                                        <div>
-                                            <p className="text-sm font-black text-indigo-950 uppercase tracking-tight">Epicentro Tático HQ</p>
-                                            <p className="text-[10px] font-bold text-indigo-400 uppercase mt-1 tracking-widest">
-                                                LAT: {localInfo.coordinates.lat.toFixed(6)} | LNG: {localInfo.coordinates.lng.toFixed(6)}
-                                            </p>
-                                        </div>
+                            
+                            {/* SANITIZAÇÃO DE DADOS (SRE TOOL) */}
+                            <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[3rem] flex items-center justify-between shadow-inner">
+                                <div className="flex items-center gap-6">
+                                    <div className="p-4 bg-white rounded-2xl text-indigo-600 shadow-sm"><RefreshCw size={28} /></div>
+                                    <div>
+                                        <p className="text-sm font-black text-indigo-950 uppercase tracking-tight">Sanitização de Dados</p>
+                                        <p className="text-[10px] font-bold text-indigo-400 uppercase mt-1 tracking-widest">
+                                            Geolocalizar automaticamente todos os endereços sem coordenadas.
+                                        </p>
                                     </div>
-                                    <CheckCircle2 size={32} className="text-emerald-500" />
                                 </div>
-                            )}
+                                <button onClick={handleBatchGeocode} disabled={isBatchRunning} className="px-8 py-3 bg-white text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2">
+                                   {isBatchRunning ? <Loader2 size={14} className="animate-spin" /> : <Crosshair size={14} />} Sincronizar Coordenadas
+                                </button>
+                            </div>
                         </div>
 
                         {/* UPLOADS & REPRESENTAÇÃO */}
@@ -764,7 +952,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                 </div>
                                 <div className="pt-6 border-t border-slate-100 flex gap-4">
                                     <button type="button" onClick={() => setIsPlanModalOpen(false)} className="flex-1 py-5 text-slate-400 font-black text-[10px] uppercase tracking-widest">Abortar</button>
-                                    <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3">
+                                    <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-950 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3">
                                         {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Sincronizar Plano
                                     </button>
                                 </div>

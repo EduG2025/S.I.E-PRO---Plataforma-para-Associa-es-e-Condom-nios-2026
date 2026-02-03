@@ -52,7 +52,7 @@ const healSchema = async () => {
     console.log("🛡️ [SRE HEAL] Auditando integridade do Kernel S.I.E PRO...");
     try {
         const coreTables = [
-            `CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY, name VARCHAR(255), shortName VARCHAR(50), cnpj VARCHAR(50), primaryColor VARCHAR(20) DEFAULT "#4f46e5", whatsapp_config JSON, module_metadata JSON, dictionary JSON, context_rules TEXT, cep VARCHAR(10), street VARCHAR(255), city VARCHAR(255), state VARCHAR(2), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+            `CREATE TABLE IF NOT EXISTS settings (id INT PRIMARY KEY, name VARCHAR(255), shortName VARCHAR(50), cnpj VARCHAR(50), primaryColor VARCHAR(20) DEFAULT "#4f46e5", whatsapp_config JSON, module_metadata JSON, dictionary JSON, context_rules TEXT, cep VARCHAR(10), street VARCHAR(255), city VARCHAR(255), state VARCHAR(2), license_status ENUM('ACTIVE', 'SUSPENDED') DEFAULT 'ACTIVE', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
             `CREATE TABLE IF NOT EXISTS ai_keys (id INT AUTO_INCREMENT PRIMARY KEY, label VARCHAR(100), key_value VARCHAR(255), provider VARCHAR(50), model VARCHAR(100), tier VARCHAR(20), status VARCHAR(20), priority INT, error_count INT DEFAULT 0, last_checked DATETIME, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
             `CREATE TABLE IF NOT EXISTS wiki_entries (id INT AUTO_INCREMENT PRIMARY KEY, category VARCHAR(50), title VARCHAR(255), slug VARCHAR(255) UNIQUE, content LONGTEXT, is_system TINYINT(1) DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB`,
             `CREATE TABLE IF NOT EXISTS studio_tokens (id INT PRIMARY KEY, border_radius INT, container_padding INT, shadow_intensity DECIMAL(3,2), font_size_base INT, font_scale DECIMAL(3,2), primary_color VARCHAR(20), config_json JSON) ENGINE=InnoDB`,
@@ -68,17 +68,15 @@ const healSchema = async () => {
 
         for (const sql of coreTables) { try { await pool.query(sql); } catch (e) { console.warn("Table Init Warn:", e.message); } }
 
-        // HEALING COLUMNS (FINANCIALS & OPERATIONS)
+        // HEALING COLUMNS
+        await addColumnSafe('settings', 'license_status', "ENUM('ACTIVE', 'SUSPENDED') DEFAULT 'ACTIVE'");
         await addColumnSafe('financials', 'plan_id', 'INT DEFAULT NULL AFTER user_id');
         await addColumnSafe('financials', 'due_date', 'DATE DEFAULT NULL AFTER amount');
         await addColumnSafe('financials', 'is_recurring', 'TINYINT(1) DEFAULT 0 AFTER type');
         await addColumnSafe('scheduled_broadcasts', 'campaign_id', 'INT DEFAULT NULL');
-        
-        // HEALING COLUMNS (SURVEYS)
         await addColumnSafe('survey_responses', 'risk_score', 'INT DEFAULT 0');
         await addColumnSafe('survey_responses', 'user_id', 'INT NULL');
         
-        // HEALING COLUMNS (USERS - CRITICAL FOR CENSUS V2)
         await addColumnSafe('users', 'socialData', 'JSON');
         await addColumnSafe('users', 'cep', 'VARCHAR(20)');
         await addColumnSafe('users', 'street', 'VARCHAR(255)');
@@ -95,7 +93,6 @@ const healSchema = async () => {
         await addColumnSafe('users', 'voting_rights', 'TINYINT(1) DEFAULT 1');
         await addColumnSafe('users', 'preferred_channel', 'VARCHAR(20) DEFAULT "WHATSAPP"');
         
-        // SRE WATCHDOG FIX: Colunas de log de mensageria
         await addColumnSafe('scheduled_broadcasts', 'sent_at', 'DATETIME NULL');
         await addColumnSafe('scheduled_broadcasts', 'error_log', 'TEXT NULL');
 
@@ -116,8 +113,7 @@ const resolveTemplate = (content, data) => {
 };
 
 /**
- * SRE MESSENGER WORKER: Processa a fila de mensagens
- * Executa a cada 10 segundos para garantir near-realtime
+ * SRE MESSENGER WORKER
  */
 const runMessageQueue = async () => {
     try {
@@ -142,7 +138,6 @@ const runMessageQueue = async () => {
 
         for (const item of pending) {
             try {
-                // Se não achou telefone no join (ex: target manual), tenta usar o valor direto se for número
                 let phone = item.phone;
                 if (!phone && /^\d+$/.test(item.target_value)) {
                     phone = item.target_value;
@@ -153,7 +148,6 @@ const runMessageQueue = async () => {
                     continue;
                 }
 
-                // Resolver Template
                 let message = item.message_body;
                 let mediaUrl = null;
                 let mediaType = 'image';
@@ -167,7 +161,6 @@ const runMessageQueue = async () => {
                     }
                 }
 
-                // Resolver Variáveis
                 const context = {
                     nome: (item.user_name || 'Membro').split(' ')[0],
                     unidade: item.unit || '---',
@@ -176,7 +169,6 @@ const runMessageQueue = async () => {
                 
                 const finalMessage = resolveTemplate(message, context);
                 
-                // Normalizar Telefone (BR)
                 const cleanPhone = phone.replace(/\D/g, '');
                 const targetNumber = cleanPhone.length <= 11 ? '55' + cleanPhone : cleanPhone;
 
@@ -200,7 +192,6 @@ const runMessageQueue = async () => {
                 await axios.post(endpoint, payload);
                 await pool.query('UPDATE scheduled_broadcasts SET status = "SENT", sent_at = NOW() WHERE id = ?', [item.id]);
                 
-                // SRE: Update Campaign Stats if linked
                 if (item.campaign_id) {
                     await pool.query('UPDATE campaigns SET sent_count = sent_count + 1 WHERE id = ?', [item.campaign_id]);
                 }
@@ -215,9 +206,6 @@ const runMessageQueue = async () => {
     }
 };
 
-/**
- * SRE BILLING WORKER: Automação Diária de Recorrência
- */
 const runBillingCycle = async () => {
     console.log("💰 [SRE BILLING] Verificando ciclo de faturamento recorrente...");
     try {
@@ -251,12 +239,11 @@ const boot = async () => {
     initStorage();
     await healSchema(); 
     
-    // Workers SRE
     runBillingCycle();
-    setInterval(runBillingCycle, 1000 * 60 * 60 * 12); // Billing: 12h
+    setInterval(runBillingCycle, 1000 * 60 * 60 * 12);
     
     console.log("📨 [SRE WORKER] Iniciando processador de fila de mensagens...");
-    setInterval(runMessageQueue, 10000); // Messenger: 10s
+    setInterval(runMessageQueue, 10000); 
 
     app.listen(PORT, () => {
         console.log(`🚀 [S.I.E PRO KERNEL] Sistema Ativo | Porta ${PORT}`);

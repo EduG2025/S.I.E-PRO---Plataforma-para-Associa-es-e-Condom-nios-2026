@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Monitor, Smartphone, Wand2, Save, LayoutGrid,
@@ -32,7 +33,6 @@ import {
   Navigation,
   PanelTop,
   Table as TableIcon,
-  // SRE FIX: Added missing Menu icon import from lucide-react
   Menu
 } from 'lucide-react';
 import { studioService, systemService } from '../services/api';
@@ -40,9 +40,8 @@ import { DesignTokens, DualDesignSystem, SystemInfo } from '../types';
 import { MENU_ITEMS } from '../constants';
 
 /**
- * S.I.E STUDIO LAB MASTER V9.0 - SOVEREIGN DESIGN HUB
- * Único ponto de verdade para o visual do ecossistema.
- * Suporta responsividade extrema (360px -> 4K).
+ * S.I.E STUDIO LAB MASTER V9.2 - SOVEREIGN DESIGN HUB
+ * Visual Engine Fix: Mobile Navigation & Drawer Logic
  */
 
 const PRESETS = [
@@ -209,7 +208,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
           </div>
           <div>
             <h1 className="text-sm md:text-lg font-black uppercase tracking-tightest leading-none text-white">Studio Lab <span className="text-indigo-400">MASTER</span></h1>
-            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">SRE Visual Sovereign Core V9.0</p>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">SRE Visual Sovereign Core V9.2</p>
           </div>
         </div>
 
@@ -607,7 +606,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
                 </aside>
               )}
 
-              {/* MOBILE MENU REAL SIMULATION */}
+              {/* MOBILE MENU SIMULATION (SIDEBAR) */}
               {simPreset.id.includes('mobile') && currentTokens.mobileMenuType === 'SIDEBAR' && (
                   <div 
                     className={`absolute inset-0 z-[300] bg-slate-950/80 backdrop-blur-md transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
@@ -633,17 +632,46 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
                   </div>
               )}
 
+              {/* MOBILE MENU SIMULATION (DRAWER_TOP) */}
+              {simPreset.id.includes('mobile') && currentTokens.mobileMenuType === 'DRAWER_TOP' && (
+                  <div 
+                    className={`absolute inset-0 z-[300] bg-slate-950/80 backdrop-blur-md transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                      <div 
+                        className={`absolute top-0 left-0 w-full bg-slate-900 border-b border-slate-800 transition-all duration-500 flex flex-col p-8 ${mobileMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
+                        style={{ backgroundColor: 'var(--sidebar-bg)' }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                          <div className="flex justify-between items-center mb-6">
+                              <Fingerprint size={32} style={{ color: 'var(--sidebar-active)' }} />
+                              <button onClick={() => setMobileMenuOpen(false)}><X size={24} className="text-white"/></button>
+                          </div>
+                          <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+                              {MENU_ITEMS.slice(0, 5).map(item => (
+                                  <div key={item.id} className="flex items-center gap-4 text-slate-400 p-3 font-black uppercase text-[10px] tracking-widest border-b border-white/5">
+                                      <item.icon size={18}/> {item.label}
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  </div>
+              )}
+
               {/* VIEWPORT PRINCIPAL SIMULADO */}
               <div className="flex-1 overflow-hidden flex flex-col relative" style={{ backgroundColor: 'var(--surface)' }}>
                 
                 {/* MOBILE TOP BAR (If Mobile) */}
                 {simPreset.id.includes('mobile') && (
-                    <div className="h-16 px-6 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div className="h-16 px-6 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 relative z-20">
                          <div className="flex items-center gap-3">
                              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white"><Shield size={16}/></div>
                              <span className="text-[10px] font-black uppercase">{systemInfo.shortName}</span>
                          </div>
-                         <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-100 rounded-lg text-slate-600"><Menu size={20}/></button>
+                         {/* SRE: Menu icon only if not Bottom Nav */}
+                         {currentTokens.mobileMenuType !== 'BOTTOM_NAV' && (
+                             <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-100 rounded-lg text-slate-600"><Menu size={20}/></button>
+                         )}
                     </div>
                 )}
 
@@ -651,7 +679,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
                   
                   <div 
                     id="sim-panel-header"
-                    className="flex justify-between items-center gap-8 bg-slate-900 p-[var(--padding-inner)] rounded-[var(--radius)] text-white shadow-2xl relative overflow-hidden shrink-0 z-30"
+                    className="flex justify-between items-center gap-8 bg-slate-900 p-[var(--padding-inner)] rounded-[var(--radius)] text-white shadow-2xl relative overflow-hidden shrink-0 z-10"
                     style={{ margin: 'var(--border-spacing)' }}
                   >
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
@@ -722,7 +750,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
 
                 {/* BOTTOM NAV SIMULATION */}
                 {simPreset.id.includes('mobile') && currentTokens.mobileMenuType === 'BOTTOM_NAV' && (
-                    <div className="h-20 bg-white border-t border-slate-100 flex items-center justify-around px-4 shrink-0">
+                    <div className="h-20 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-around px-4 shrink-0 z-30">
                          {MENU_ITEMS.slice(0, 4).map(item => (
                              <div key={item.id} className="flex flex-col items-center gap-1 text-slate-400">
                                  <item.icon size={20}/>
@@ -769,7 +797,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
         <div className="flex items-center gap-10">
           <div className="flex items-center gap-4">
             <ShieldCheck size={18} className="text-indigo-600" style={{ color: 'var(--sie-primary)' }} />
-            <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">SRE Design Sovereign Hub V9.0</span>
+            <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">SRE Design Sovereign Hub V9.2</span>
           </div>
           <div className="h-5 w-px bg-slate-200"></div>
           <div className="flex items-center gap-4">
@@ -777,7 +805,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kernel Sincronizado: 200 OK</span>
           </div>
         </div>
-      </footer >
+      </footer>
     </div>
   );
 };

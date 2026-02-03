@@ -12,7 +12,8 @@ const ServerClock = () => {
         const syncTime = async () => {
             try {
                 const start = Date.now();
-                const res = await api.get('/settings/time');
+                // SRE FIX: Updated endpoint to /time (bypassing settings sub-route issues)
+                const res = await api.get('/time');
                 const end = Date.now();
                 const latency = (end - start) / 2;
                 

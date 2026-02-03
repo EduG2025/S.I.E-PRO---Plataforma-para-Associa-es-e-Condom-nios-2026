@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { SystemInfo, User, Incident, SurveyResponse, TacticalAnalysis } from '../types';
 import { mapService, operationsService, aiService } from '../services/api';
@@ -5,7 +6,7 @@ import {
   Search, Loader2, Target, Crosshair, Users, ChevronRight,
   MapPin, AlertTriangle, BrainCircuit, Activity, X,
   FileText, Zap, ShieldAlert, Satellite, RefreshCw, User as UserIcon,
-  Radar // NOVO: Ícone para o modo Radar
+  Radar, Layers, Map as MapIcon2
 } from 'lucide-react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -14,7 +15,6 @@ import 'leaflet/dist/leaflet.css';
 import { debounce } from 'lodash';
 
 // --- CORREÇÃO DE ÍCONES DO LEAFLET EM REACT (SRE Standard) ---
-// Garante que os marcadores apareçam mesmo sem config de bundler
 const ICON_URL = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png';
 const ICON_RETINA_URL = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png';
 const SHADOW_URL = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png';
@@ -37,12 +37,11 @@ interface SmartMapProps {
   onSelectEntity: (entity: any) => void;
   focusCoord?: { lat: number, lng: number } | null;
   showSearch?: boolean;
-  // SRE Patch: Propriedade para injetar dados filtrados do BI
   filteredData?: User[];
+  visualizationMode?: 'DEFAULT' | 'RISK' | 'AGE';
 }
 
-const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSearch = true, filteredData }: SmartMapProps) => {
-  // --- ESTADOS NUCLEARES ---
+const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSearch = true, filteredData, visualizationMode = 'DEFAULT' }: SmartMapProps) => {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [units, setUnits] = useState<User[]>([]);
   const [surveys, setSurveys] = useState<SurveyResponse[]>([]);
@@ -51,39 +50,63 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
 
-  // --- ESTADOS DE INTELIGÊNCIA ---
   const [selectedDossier, setSelectedDossier] = useState<TacticalAnalysis | null>(null);
   const [isGeneratingDossier, setIsGeneratingDossier] = useState<string | number | null>(null);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
-  const [telemetry, setTelemetry] = useState({ latency: 0, lastSync: '', status: 'STABLE' });
 
-  // --- ESTADOS RADAR TÁTICO (NOVO) ---
   const [radarMode, setRadarMode] = useState(false);
-  const [radarRange, setRadarRange] = useState(500); // metros
+  const [radarRange, setRadarRange] = useState(500);
   const [lastRadarCount, setLastRadarCount] = useState<number | null>(null);
+  const [radarAlert, setRadarAlert] = useState<string | null>(null);
 
-  const mapContainerRef = useRef<HTMLDivElement | null>(null); // CORRIGIDO
-  /* FIX: Using any type for mapInstanceRef to avoid Namespace '"leaflet"' has no exported member 'Map' error */
-  const mapInstanceRef = useRef<any | null>(null);
+  // New State for Layer Toggle
+  const [layerType, setLayerType] = useState<'STREET' | 'SATELLITE'>('STREET');
 
-  // Registro de camadas para manipulação direta (SRE Performance Pattern)
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
+
+  // SRE: Lógica de Cluster Customizada
+  const createClusterIcon = (cluster: any) => {
+    const count = cluster.getChildCount();
+    let size = 'small';
+    if (count > 10) size = 'medium';
+    if (count > 50) size = 'large';
+
+    return L.divIcon({
+      html: `<div class="sie-cluster-marker ${size}">
+               <div class="ring"></div>
+               <span class="count">${count}</span>
+             </div>`,
+      className: 'sie-cluster-container',
+      iconSize: L.point(40, 40)
+    });
+  };
+
   const registry = useRef({
-    markersGroup: L.layerGroup(),
+    // SRE Optimization: MarkerClusterGroup para alta densidade
+    // @ts-ignore - Leaflet.markercluster injetado via CDN
+    markersGroup: (L as any).markerClusterGroup ? (L as any).markerClusterGroup({
+        maxClusterRadius: 60,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: createClusterIcon,
+        chunkedLoading: true // Performance fix para 1k+ markers
+    }) : L.layerGroup(),
     incidentsGroup: L.layerGroup(),
     circlesGroup: L.layerGroup(),
     heatGroup: L.layerGroup(),
     pingLayer: L.layerGroup(),
     surveyGroup: L.layerGroup(),
     searchResultGroup: L.layerGroup(),
-    radarLayer: L.layerGroup() // NOVO: Camada para o Radar
+    radarLayer: L.layerGroup()
   });
 
-  // --- CONFIGURAÇÕES DINÂMICAS ---
   const meta = useMemo(() => systemInfo?.module_metadata?.map || {}, [systemInfo]);
   const primaryColor = systemInfo?.primaryColor || '#4f46e5';
   const rules = useMemo(() => {
     try {
-      // Added context_rules to SystemInfo type in types.ts to fix property access error
       const r = systemInfo?.context_rules;
       return typeof r === 'string' ? JSON.parse(r) : r || {};
     } catch { return {}; }
@@ -98,80 +121,58 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     } catch { return fallback; }
   }, [systemInfo]);
 
-  // --- HELPER: PARSE DE COORDENADAS (SRE SAFE) ---
-  const parseCoords = (c: any) => {
+  // SRE FIX: Moved parseCoords outside or useCallback to be stable for other hooks
+  const parseCoords = useCallback((c: any) => {
     if (!c) return null;
     try {
       const parsed = typeof c === 'string' ? JSON.parse(c) : c;
       const lat = parseFloat(parsed.lat);
       const lng = parseFloat(parsed.lng || parsed.lon);
-
       if (isNaN(lat) || isNaN(lng)) return null;
       return { lat, lng };
     } catch { return null; }
-  };
+  }, []);
 
-  // --- SINCRONIZAÇÃO TÁTICA (AUTO-POLLING / BI SYNC) ---
   const loadData = useCallback(async () => {
-    // Se filteredData existir (Modo BI), NÃO buscamos units na API para não sobrescrever o filtro
     const isBIMode = !!filteredData;
-    const start = performance.now();
-
     try {
       const promises: Promise<any>[] = [
         operationsService.getIncidents(),
         mapService.getSurveyResponses()
       ];
 
-      // Só busca units se NÃO estiver em modo BI
       if (!isBIMode) {
         promises.push(mapService.getUnits());
       }
 
       const results = await Promise.allSettled(promises);
 
-      // Incidents é sempre o índice 0
       if (results[0].status === 'fulfilled') setIncidents(results[0].value.data?.data || []);
-
-      // Surveys é sempre o índice 1
       if (results[1].status === 'fulfilled') setSurveys(results[1].value.data?.data || []);
 
-      // Units é o índice 2 APENAS se !isBIMode
       if (!isBIMode && results[2] && results[2].status === 'fulfilled') {
         const validUnits = (results[2].value.data?.data || []).filter((u: User) => u.coordinates);
         setUnits(validUnits);
       }
-
-      setTelemetry({
-        latency: Math.round(performance.now() - start),
-        lastSync: new Date().toLocaleTimeString(),
-        status: 'STABLE'
-      });
-    } catch { setTelemetry(prev => ({ ...prev, status: 'DEGRADED' })); }
+    } catch { console.warn("Map data sync issue"); }
   }, [filteredData]);
 
-  // SRE: Efeito de Sincronia BI -> Mapa
-  // Atualiza as unidades sempre que o filtro do Dashboard mudar
   useEffect(() => {
     if (filteredData) {
-      // Filtramos apenas quem tem coordenadas para evitar processamento inútil no mapa
       const validFilteredUnits = filteredData.filter(u => u.coordinates);
       setUnits(validFilteredUnits);
     }
   }, [filteredData]);
 
-  // Polling apenas para incidentes/surveys se estiver em BI Mode, ou tudo se Standalone
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // --- FUNÇÃO RADAR TÁTICO (NOVO) ---
   const triggerRadar = useCallback((lat: number, lng: number) => {
     registry.current.radarLayer.clearLayers();
 
-    // Estética de Radar SRE: Círculo de Varredura
     L.circle([lat, lng], {
       radius: radarRange,
       color: '#10b981',
@@ -181,7 +182,6 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       dashArray: '5, 10'
     }).addTo(registry.current.radarLayer);
 
-    // Efeito Visual de Ping no Epicentro
     const ping = L.divIcon({
       className: 'radar-ping',
       html: `<div class="radar-ping-ring"></div>`,
@@ -189,21 +189,23 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     });
     L.marker([lat, lng], { icon: ping }).addTo(registry.current.radarLayer);
 
-    // Filtro Geográfico SRE Distancial
     const center = L.latLng(lat, lng);
     const residentsInRadius = units.filter(u => {
       const c = parseCoords(u.coordinates);
       if (!c) return false;
-      // L.latLng.distanceTo retorna a distância em metros
       return center.distanceTo([c.lat, c.lng]) <= radarRange;
     });
 
     setLastRadarCount(residentsInRadius.length);
 
-  }, [units, radarRange]);
+    // SRE Feedback: Alerta se zona estiver vazia
+    if (residentsInRadius.length === 0) {
+        setRadarAlert("NENHUM ALVO LOCALIZADO NA VARREDURA");
+        setTimeout(() => setRadarAlert(null), 3500);
+    }
 
+  }, [units, radarRange, parseCoords]);
 
-  // --- PING TÁTICO ---
   const triggerPing = useCallback((lat: number, lng: number) => {
     if (!mapInstanceRef.current) return;
     mapInstanceRef.current.flyTo([lat, lng], 18, { duration: 2.5 });
@@ -221,10 +223,32 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
 
   useEffect(() => { if (focusCoord) triggerPing(focusCoord.lat, focusCoord.lng); }, [focusCoord, triggerPing]);
 
-  // --- INICIALIZAÇÃO DO MAPA ---
+  // SRE Update: Handle Layer Switching
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    
+    if (tileLayerRef.current) {
+        tileLayerRef.current.remove();
+    }
+
+    const url = layerType === 'STREET' 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+    
+    const attribution = layerType === 'STREET' 
+        ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        : 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+
+    tileLayerRef.current = L.tileLayer(url, {
+        maxZoom: 19,
+        attribution: attribution,
+        subdomains: layerType === 'STREET' ? 'abcd' : []
+    }).addTo(mapInstanceRef.current);
+
+  }, [layerType]);
+
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
-
     if (!(L as any).map) return;
 
     const map = L.map(mapContainerRef.current, {
@@ -235,17 +259,12 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       preferCanvas: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20,
-      subdomains: 'abcd'
-    }).addTo(map);
-
     Object.values(registry.current).forEach(layer => layer.addTo(map));
-
     mapInstanceRef.current = map;
 
-    // NOVO: Listener para Radar Tático
-    // FIXED: Changed L.LeafletMouseEvent to any to resolve Namespace missing member error
+    // Trigger initial layer load
+    setLayerType('STREET'); 
+
     map.on('click', (e: any) => {
       if (radarMode) {
         triggerRadar(e.latlng.lat, e.latlng.lng);
@@ -258,19 +277,8 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     return () => { observer.disconnect(); map.remove(); mapInstanceRef.current = null; };
   }, [epicenter, rules, radarMode, triggerRadar]);
 
-  // --- INTERAÇÃO IA ---
-  const handleGenerateDossier = async (u: User) => {
-    setIsGeneratingDossier(u.id);
-    try {
-      const res = await aiService.generateUserDossier(u.id);
-      setSelectedDossier(res.data);
-      setIsDossierOpen(true);
-    } catch { console.error("AI Analysis Fail"); } finally { setIsGeneratingDossier(null); }
-  };
-
-
-  // --- BUSCA NEURAL V3 ---
-  const performSearch = async (q: string) => {
+  // SRE FIX: performSearch wrapped in useCallback to stabilize debouncedSearch dependency
+  const performSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
       registry.current.searchResultGroup.clearLayers();
       return setShowResults(false);
@@ -328,46 +336,86 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       });
 
     } catch (e: any) { console.error("[SRE SEARCH FAIL]", e.message); } finally { setIsSearching(false); }
-  };
+  }, [primaryColor, parseCoords, triggerPing]);
 
   const debouncedSearch = useMemo(() => debounce(performSearch, 500), [performSearch]);
 
-  // --- RENDERIZAÇÃO DE CAMADAS ---
-  useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    const { markersGroup, incidentsGroup, circlesGroup, heatGroup } = registry.current;
+  // SRE: HEATMAP SAFETY GUARD
+  // Isola a lógica de Heatmap para permitir validação de dimensões e re-renderização segura
+  const updateHeatmap = useCallback(() => {
+      if (!mapInstanceRef.current) return;
+      const { heatGroup } = registry.current;
+      
+      // Always clear first
+      heatGroup.clearLayers();
+      
+      if (!activeLayers.heatmap || !(L as any).heatLayer) return;
 
-    // 1. Heatmap
-    heatGroup.clearLayers();
-    if (activeLayers.heatmap && (L as any).heatLayer) {
+      // SRE CRITICAL FIX: Prevent crash on hidden/zero-size canvas
+      const size = mapInstanceRef.current.getSize();
+      if (size.x === 0 || size.y === 0) return;
+
       const points = incidents.map(inc => {
         const c = parseCoords(inc.coordinates);
         return c ? [c.lat, c.lng, 0.6] : null;
       }).filter(Boolean);
+
       if (points.length > 0) {
         // @ts-ignore
         L.heatLayer(points, { radius: 30, blur: 20 }).addTo(heatGroup);
       }
-    }
+  }, [incidents, activeLayers.heatmap, parseCoords]);
 
-    // 2. Unidades / Residentes
+  // SRE: Heatmap Resize Listener
+  // Garante que o heatmap seja desenhado quando o mapa ganhar dimensões (ex: ao abrir a aba)
+  useEffect(() => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      
+      map.on('resize', updateHeatmap);
+      return () => { map.off('resize', updateHeatmap); }
+  }, [updateHeatmap]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const { markersGroup, incidentsGroup, circlesGroup } = registry.current;
+
+    // Heatmap via Safe Update
+    updateHeatmap();
+
     markersGroup.clearLayers();
     if (activeLayers.residents) {
-      const isFiltered = !!filteredData;
       units.forEach(u => {
         const c = parseCoords(u.coordinates);
         if (!c) return;
 
         const survey = surveys.find(s => s.user_id === u.id);
-        const answers = survey ? (typeof survey.answers === 'string' ? JSON.parse(survey.answers) : survey.answers) : null;
-        const isVulnerable = answers?.necessidade_especial === 'SIM' || answers?.vulnerabilidade === 'ALTA';
+        
+        let markerColor = primaryColor;
+        
+        if (visualizationMode === 'RISK') {
+            const socialText = JSON.stringify(u.socialData || {}).toUpperCase();
+            if (socialText.includes('BAIXA') || socialText.includes('SIM') || socialText.includes('BOLSA')) {
+                markerColor = '#ef4444';
+            } else if (socialText.includes('MEDIA')) {
+                markerColor = '#f59e0b';
+            } else {
+                markerColor = '#10b981';
+            }
+        } else if (visualizationMode === 'AGE') {
+            const age = u.age || 0;
+            if (age < 18) markerColor = '#8b5cf6';
+            else if (age < 60) markerColor = '#3b82f6';
+            else markerColor = '#f97316';
+        } else if (!!filteredData) {
+            markerColor = '#10b981';
+        }
 
         const icon = L.divIcon({
           className: 'marker-tatico',
           html: `
             <div class="relative group cursor-pointer">
-                ${isVulnerable ? '<div class="absolute -inset-3 bg-amber-500/40 rounded-full animate-ping"></div>' : ''}
-                <div style="background-color:${isFiltered ? '#10b981' : primaryColor}" class="w-6 h-6 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
+                <div style="background-color:${markerColor}" class="w-6 h-6 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 </div>
             </div>
@@ -404,14 +452,8 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         `;
 
         const marker = L.marker([c.lat, c.lng], { icon })
-          .bindPopup(popupContent, {
-            className: 'custom-tactic-popup',
-            closeButton: false,
-            offset: [0, -10]
-          })
-          .on('click', () => {
-            mapInstanceRef.current?.flyTo([c.lat, c.lng], 18, { duration: 1 });
-          })
+          .bindPopup(popupContent, { className: 'custom-tactic-popup', closeButton: false, offset: [0, -10] })
+          .on('click', () => { mapInstanceRef.current?.flyTo([c.lat, c.lng], 18, { duration: 1 }); })
           .addTo(markersGroup);
 
         marker.on('popupopen', () => {
@@ -423,7 +465,6 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       });
     }
 
-    // 3. Incidentes
     incidentsGroup.clearLayers();
     circlesGroup.clearLayers();
     if (activeLayers.incidents) {
@@ -445,12 +486,37 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
           .addTo(incidentsGroup);
       });
     }
-  }, [units, incidents, surveys, activeLayers, primaryColor, onSelectEntity, filteredData]);
+  }, [units, incidents, surveys, activeLayers, primaryColor, onSelectEntity, filteredData, visualizationMode, parseCoords, updateHeatmap]);
 
   return (
     <div className="h-full w-full relative bg-[#020617] overflow-hidden flex flex-col font-sans">
 
-      {/* HUD 1: BUSCA GLOBAL / CONTROLE RADAR */}
+      {/* SRE ALERT OVERLAY (ZONA VAZIA) */}
+      {radarAlert && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[3000] bg-rose-600 text-white px-8 py-3 rounded-2xl shadow-2xl animate-bounce flex items-center gap-3">
+            <AlertTriangle size={20} />
+            <span className="text-xs font-black uppercase tracking-widest">{radarAlert}</span>
+        </div>
+      )}
+
+      {/* LAYER SWITCHER (OPTIMIZED VISUALIZATION) */}
+      <div className="absolute top-8 left-6 z-[2000] flex flex-col gap-2">
+          <button 
+            onClick={() => setLayerType('STREET')} 
+            className={`p-3 rounded-xl transition-all shadow-lg border backdrop-blur-md ${layerType === 'STREET' ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-900/90 text-slate-400 border-white/10 hover:text-white'}`}
+            title="Vista de Rua"
+          >
+              <MapIcon2 size={18}/>
+          </button>
+          <button 
+            onClick={() => setLayerType('SATELLITE')} 
+            className={`p-3 rounded-xl transition-all shadow-lg border backdrop-blur-md ${layerType === 'SATELLITE' ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-900/90 text-slate-400 border-white/10 hover:text-white'}`}
+            title="Vista de Satélite"
+          >
+              <Satellite size={18}/>
+          </button>
+      </div>
+
       {showSearch && (
         <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[1000] flex gap-4 w-full max-w-2xl px-6">
           <div className="relative group flex-1">
@@ -488,20 +554,8 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         </div>
       )}
 
-      {/* HUD 2: TELEMETRIA SRE ZENITH / CONTROLE RADAR */}
+      {/* HUD RADAR (MANTIDO E ISOLADO) */}
       <div className="absolute bottom-10 left-10 z-[1000] flex flex-col gap-4">
-        <div className="hidden lg:flex bg-slate-900/90 backdrop-blur-xl p-5 rounded-3xl border border-white/10 shadow-2xl w-64 space-y-4">
-          <div className="flex items-center justify-between border-b border-white/5 pb-3">
-            <div className="flex items-center gap-2"><Activity size={14} className="text-emerald-500" /><span className="text-[10px] font-black text-white uppercase tracking-widest">SRE ZENITH HUD</span></div>
-            <div className={`w-2 h-2 rounded-full ${telemetry.status === 'STABLE' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
-          </div>
-          <div className="space-y-2 text-[8px] font-black uppercase">
-            <div className="flex justify-between text-slate-500"><span>Latência</span><span className="text-white font-mono">{telemetry.latency}ms</span></div>
-            <div className="flex justify-between text-slate-500"><span>Last Sync</span><span className="text-white font-mono">{telemetry.lastSync}</span></div>
-            <div className="flex justify-between text-slate-500"><span>Mode</span><span className="text-indigo-400">{filteredData ? 'BI FILTER' : 'STANDALONE'}</span></div>
-          </div>
-        </div>
-
         {radarMode && (
           <div className="bg-slate-900/90 backdrop-blur-xl p-5 rounded-3xl border border-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] w-64 space-y-4 animate-in fade-in duration-300">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -529,7 +583,6 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         )}
       </div>
 
-      {/* HUD 3: DOSSIÊ PREDITIVO IA */}
       {isDossierOpen && selectedDossier && (
         <div className="absolute top-0 right-0 h-full w-full lg:w-[450px] z-[2000] bg-slate-950/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-500">
           <div className="p-8 border-b border-white/5 flex justify-between items-center bg-indigo-50/5">
@@ -557,16 +610,6 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         </div>
       )}
 
-      {/* LOADER TÁTICO */}
-      {isGeneratingDossier && (
-        <div className="absolute inset-0 z-[3000] bg-slate-950/60 backdrop-blur-md flex items-center justify-center">
-          <div className="bg-slate-900 p-10 rounded-[3rem] border border-white/10 flex flex-col items-center gap-6 shadow-2xl animate-in zoom-in duration-300">
-            <div className="relative"><BrainCircuit size={56} className="text-indigo-500 animate-pulse" /><div className="absolute -inset-6 bg-indigo-500/20 blur-2xl rounded-full"></div></div>
-            <div className="text-center"><p className="text-xs font-black text-white uppercase tracking-widest">Invocando Gemini Zenith</p><p className="text-[9px] text-slate-500 font-bold uppercase mt-1">Cruzando dados de vulnerabilidade...</p></div>
-          </div>
-        </div>
-      )}
-
       <div className="absolute bottom-10 right-10 z-[1000] flex flex-col gap-4">
         <button onClick={() => mapInstanceRef.current?.flyTo([epicenter.lat, epicenter.lng], 16)} className="p-5 bg-indigo-600 text-white rounded-2xl shadow-xl active:scale-95 transition-all"><Crosshair size={24} /></button>
       </div>
@@ -580,7 +623,6 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         .sat-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 15px currentColor; border: 2px solid white; }
         @keyframes sat-p { 0% { transform: scale(0.1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
 
-        /* RADAR STYLES (NOVO) */
         .radar-ping { position: relative; display: flex; align-items: center; justify-content: center; }
         .radar-ping-ring {
             width: 40px; height: 40px; border: 2px solid #10b981; border-radius: 50%;
@@ -595,6 +637,27 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
 
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #312e81; border-radius: 10px; }
+
+        /* SRE CLUSTER STYLES */
+        .sie-cluster-container { pointer-events: none; }
+        .sie-cluster-marker {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: #020617; border: 2px solid #6366f1;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+            position: relative; pointer-events: auto;
+            transition: all 0.3s ease;
+        }
+        .sie-cluster-marker:hover { transform: scale(1.1); border-color: #ffffff; }
+        .sie-cluster-marker.medium { width: 50px; height: 50px; border-color: #f59e0b; }
+        .sie-cluster-marker.large { width: 60px; height: 60px; border-color: #ef4444; }
+        .sie-cluster-marker .count { font-size: 12px; font-weight: 900; color: white; }
+        .sie-cluster-marker .ring {
+            position: absolute; inset: -4px; border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.2);
+            animation: cluster-pulse 2s infinite;
+        }
+        @keyframes cluster-pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
       `}</style>
     </div>
   );

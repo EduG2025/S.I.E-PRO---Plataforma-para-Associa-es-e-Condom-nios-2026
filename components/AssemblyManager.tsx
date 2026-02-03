@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Gavel, Play, StopCircle, FileText, Download, Trash2, Edit2, 
-    Plus, Search, Clock, Users, ChevronRight, X, Save, Sparkles, Printer, Loader2, ThumbsUp, ThumbsDown, CircleSlash, Send, MonitorPlay, BarChart3
+    Plus, Search, Clock, Users, ChevronRight, X, Save, Sparkles, Printer, Loader2, ThumbsUp, ThumbsDown, CircleSlash, Send, MonitorPlay, BarChart3,
+    FileSignature, BrainCircuit, CheckCircle2, AlertTriangle
 } from 'lucide-react';
-import { assemblyService, aiService } from '../services/api';
-// FIX: Added SystemInfo to imports from types to satisfy TS requirements in App.tsx
+import { assemblyService, aiService, documentService } from '../services/api';
 import { User, SystemInfo } from '../types';
 
-// FIX: Added optional systemInfo to props interface to resolve TS errors in App.tsx
 interface AssemblyManagerProps {
     currentUser?: User | null;
     systemInfo?: SystemInfo;
 }
 
-// FIX: Added systemInfo to destructured parameters to match the passed props from App.tsx
 const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
     const [assemblies, setAssemblies] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -25,12 +23,14 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
     // Live Session States
     const [activeSession, setActiveSession] = useState<any>(null);
     const [isGeneratingAta, setIsGeneratingAta] = useState(false);
+    const [generatedAta, setGeneratedAta] = useState<string>('');
     const [messages, setMessages] = useState<any[]>([]);
     const [chatInput, setChatInput] = useState('');
     
     // Motor de Votação Reativo
     const [votingData, setVotingData] = useState({
-        quorum: 0, totalEligible: 452,
+        quorum: 0, 
+        totalEligible: 452,
         topics: [
             { id: 1, title: 'Previsão Orçamentária 2025/2026', votes: { yes: 0, no: 0, abstain: 0 } },
             { id: 2, title: 'Fundo de Reserva para Manutenção Estrutural', votes: { yes: 0, no: 0, abstain: 0 } }
@@ -69,7 +69,6 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
             }
             setIsModalOpen(false);
             loadAssemblies();
-            alert("✅ Protocolo de assembleia registrado.");
         } catch (err) {
             alert("Falha ao salvar no Kernel.");
         } finally { setIsSaving(false); }
@@ -92,6 +91,74 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
         setVotingData(prev => ({ ...prev, quorum: Math.floor(Math.random() * (150 - 80 + 1)) + 80 }));
     };
 
+    const handleGenerateAta = async () => {
+        if (!activeSession) return;
+        setIsGeneratingAta(true);
+        
+        const chatContext = messages.filter(m => m.type === 'user').map(m => `${m.user}: ${m.text}`).join('\n');
+        const votingContext = votingData.topics.map(t => `${t.title}: SIM(${t.votes.yes}), NÃO(${t.votes.no}), ABSTENSÃO(${t.votes.abstain})`).join('\n');
+        
+        const prompt = `
+            ATUE COMO: Secretário Jurídico SRE.
+            TAREFA: Gerar a ATA OFICIAL da assembleia "${activeSession.title}".
+            
+            CONTEÚDO DO DEBATE:
+            ${chatContext}
+            
+            RESULTADOS DAS VOTAÇÕES:
+            ${votingContext}
+            
+            REQUISITOS:
+            1. Formato HTML Profissional.
+            2. Inclua cabeçalho com data (${new Date(activeSession.date).toLocaleDateString()}) e quórum (${votingData.quorum} presentes).
+            3. Resuma os principais pontos de discussão de forma neutra.
+            4. Registre formalmente os resultados de cada pauta.
+            5. Finalize com campo para assinaturas.
+            RETORNE APENAS O HTML DO CORPO DA ATA.
+        `;
+
+        try {
+            const res = await aiService.generateDocument(prompt, `Entidade: ${systemInfo?.name}`);
+            setGeneratedAta(res.data.text);
+            setMessages(prev => [...prev, { id: Date.now(), user: 'ADVISOR IA', text: 'Ata preliminar gerada com sucesso. Revise no painel de ata.', type: 'system' }]);
+        } catch (e) {
+            alert("Falha na geração neural da ata.");
+        } finally {
+            setIsGeneratingAta(false);
+        }
+    };
+
+    const handleFinishAssembly = async () => {
+        if (!confirm("Deseja encerrar a sessão e salvar a Ata oficial no Repositório?")) return;
+        setIsSaving(true);
+        try {
+            // 1. Atualiza status da assembleia
+            await assemblyService.update(activeSession.id, { 
+                status: 'FINISHED',
+                description: activeSession.description + "\n\nSESSÃO FINALIZADA VIA TERMINAL DIGITAL."
+            });
+
+            // 2. Salva a Ata como um documento oficial se existir
+            if (generatedAta) {
+                await documentService.create({
+                    title: `ATA - ${activeSession.title}`,
+                    content: generatedAta,
+                    type: 'ATA',
+                    status: 'APPROVED'
+                });
+            }
+
+            alert("✅ ASSEMBLEIA ENCERRADA. Ata comitada no Hub de Documentos.");
+            setActiveSession(null);
+            setActiveTab('HISTORY');
+            loadAssemblies();
+        } catch (e) {
+            alert("Erro ao encerrar sessão.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const registerVote = (topicId: number, type: 'yes' | 'no' | 'abstain') => {
         setVotingData(prev => ({
             ...prev,
@@ -106,6 +173,8 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
         setMessages(prev => [...prev, newMsg]);
         setChatInput('');
     };
+
+    const primaryColor = systemInfo?.primaryColor || '#4f46e5';
 
     if (loading) return (
         <div className="h-full flex items-center justify-center p-20">
@@ -175,6 +244,7 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-scale-in pb-10">
                         <div className="lg:col-span-8 space-y-8">
                             <div className="bg-slate-950 rounded-[3rem] p-12 text-white shadow-2xl border border-white/5 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-10 opacity-5"><BrainCircuit size={200}/></div>
                                 <div className="relative z-10">
                                     <div className="flex items-center gap-3 px-4 py-2 bg-rose-500/10 text-rose-400 rounded-full w-fit border border-rose-500/20 mb-6">
                                         <div className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></div>
@@ -189,41 +259,78 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
                                     <div key={topic.id} className="bg-white p-10 rounded-[3.5rem] border border-slate-200 shadow-sm">
                                         <h4 className="text-2xl font-black text-slate-800 tracking-tight mb-8 uppercase">{topic.title}</h4>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <button onClick={() => registerVote(topic.id, 'yes')} className="p-8 bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 rounded-[2.5rem] flex flex-col items-center gap-3 transition-all border border-transparent hover:border-emerald-100">
+                                            <button onClick={() => registerVote(topic.id, 'yes')} className="p-8 bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 rounded-[2.5rem] flex flex-col items-center gap-3 transition-all border border-transparent hover:border-emerald-100 shadow-sm active:scale-95">
                                                 <ThumbsUp size={36}/><span className="text-xs font-black uppercase tracking-widest">{topic.votes.yes} Favoráveis</span>
                                             </button>
-                                            <button onClick={() => registerVote(topic.id, 'no')} className="p-8 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-[2.5rem] flex flex-col items-center gap-3 transition-all border border-transparent hover:border-rose-100">
+                                            <button onClick={() => registerVote(topic.id, 'no')} className="p-8 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-[2.5rem] flex flex-col items-center gap-3 transition-all border border-transparent hover:border-rose-100 shadow-sm active:scale-95">
                                                 <ThumbsDown size={36}/><span className="text-xs font-black uppercase tracking-widest">{topic.votes.no} Contrários</span>
                                             </button>
-                                            <button onClick={() => registerVote(topic.id, 'abstain')} className="p-8 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-[2.5rem] flex flex-col items-center gap-3 transition-all border border-transparent hover:border-slate-200">
+                                            <button onClick={() => registerVote(topic.id, 'abstain')} className="p-8 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-[2.5rem] flex flex-col items-center gap-3 transition-all border border-transparent hover:border-slate-200 shadow-sm active:scale-95">
                                                 <CircleSlash size={36}/><span className="text-xs font-black uppercase tracking-widest">{topic.votes.abstain} Abstenções</span>
                                             </button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
+
+                            {generatedAta && (
+                                <div className="bg-white p-12 rounded-[3.5rem] border-2 border-indigo-100 shadow-2xl animate-fade-in relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-6 bg-indigo-50 text-indigo-400 rounded-bl-[3rem]"><FileSignature size={24}/></div>
+                                    <h4 className="text-xl font-black uppercase text-indigo-900 mb-8 flex items-center gap-3"><Sparkles size={20}/> Ata Preliminar (IA Ghostwriter)</h4>
+                                    <div className="prose prose-indigo max-w-none border-l-4 border-indigo-500 pl-8 py-2 text-slate-700 bg-slate-50/50 rounded-r-2xl" dangerouslySetInnerHTML={{ __html: generatedAta }} />
+                                    <div className="mt-10 flex gap-4">
+                                        <button onClick={handleFinishAssembly} className="flex-1 py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3">
+                                            <CheckCircle2 size={18}/> Comitar Ata Oficial
+                                        </button>
+                                        <button onClick={() => setGeneratedAta('')} className="px-8 py-5 bg-white border border-slate-200 text-slate-400 rounded-2xl font-black text-[10px] uppercase hover:text-rose-500 transition-all">Descartar</button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         
-                        <div className="lg:col-span-4 bg-white rounded-[3.5rem] border border-slate-200 shadow-sm flex flex-col h-[700px] overflow-hidden sticky top-8">
-                            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
-                                <h5 className="font-black uppercase text-[10px] tracking-widest text-slate-500">Debate em Tempo Real</h5>
-                                <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
-                                    <Users size={14}/><span className="text-[10px] font-black">{votingData.quorum} Ativos</span>
-                                </div>
+                        <div className="lg:col-span-4 space-y-6">
+                            {/* GOVERNANCE ACTIONS PANEL */}
+                            <div className="bg-slate-900 rounded-[3.5rem] p-8 text-white shadow-xl space-y-6 border border-white/5">
+                                <h5 className="text-[10px] font-black uppercase text-indigo-400 tracking-widest flex items-center gap-2">Controles de Governança</h5>
+                                <button 
+                                    onClick={handleGenerateAta} 
+                                    disabled={isGeneratingAta}
+                                    className="w-full py-5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all border border-white/10"
+                                >
+                                    {isGeneratingAta ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} className="text-indigo-400"/>}
+                                    Gerar Minuta com IA
+                                </button>
+                                <button 
+                                    onClick={handleFinishAssembly}
+                                    disabled={isSaving}
+                                    className="w-full py-5 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-rose-900/40 transition-all active:scale-95"
+                                >
+                                    <StopCircle size={16}/> Encerrar Sessão
+                                </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-8 space-y-5 custom-scrollbar bg-slate-50/20">
-                                {messages.map(m => (
-                                    <div key={m.id} className={`p-5 rounded-2xl shadow-sm border animate-fade-in ${m.type === 'system' ? 'bg-indigo-50 border-indigo-100 text-indigo-600 text-center font-bold text-[10px] uppercase tracking-widest' : 'bg-white border-slate-100 text-slate-700'}`}>
-                                        {m.type !== 'system' && <p className="text-[9px] font-black uppercase text-indigo-600 mb-1">{m.user}</p>}
-                                        <p className="text-xs font-medium leading-relaxed uppercase">{m.text}</p>
+
+                            {/* CHAT PANEL */}
+                            <div className="bg-white rounded-[3.5rem] border border-slate-200 shadow-sm flex flex-col h-[550px] overflow-hidden sticky top-8">
+                                <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+                                    <h5 className="font-black uppercase text-[10px] tracking-widest text-slate-500">Debate em Tempo Real</h5>
+                                    <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
+                                        <Users size={14}/><span className="text-[10px] font-black">{votingData.quorum} Ativos</span>
                                     </div>
-                                ))}
-                            </div>
-                            <div className="p-6 border-t border-slate-100 bg-white shrink-0">
-                                <form onSubmit={handleSendMessage} className="flex gap-3">
-                                    <input className="flex-1 bg-slate-50 border-slate-100 rounded-xl px-5 h-14 text-sm font-medium outline-none transition-all uppercase" placeholder="Mensagem..." value={chatInput} onChange={e => setChatInput(e.target.value)} />
-                                    <button type="submit" className="p-4 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all"><Send size={20}/></button>
-                                </form>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-8 space-y-5 custom-scrollbar bg-slate-50/20">
+                                    {messages.map(m => (
+                                        <div key={m.id} className={`p-5 rounded-2xl shadow-sm border animate-fade-in ${m.type === 'system' ? 'bg-indigo-50 border-indigo-100 text-indigo-600 text-center font-bold text-[10px] uppercase tracking-widest' : 'bg-white border-slate-100 text-slate-700'}`}>
+                                            {m.type !== 'system' && <p className="text-[9px] font-black uppercase text-indigo-600 mb-1">{m.user}</p>}
+                                            <p className="text-xs font-medium leading-relaxed uppercase">{m.text}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="p-6 border-t border-slate-100 bg-white shrink-0">
+                                    <form onSubmit={handleSendMessage} className="flex gap-3">
+                                        <input className="flex-1 bg-slate-50 border-slate-100 rounded-xl px-5 h-14 text-sm font-medium outline-none transition-all uppercase" placeholder="Mensagem..." value={chatInput} onChange={e => setChatInput(e.target.value)} />
+                                        <button type="submit" className="p-4 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all"><Send size={20}/></button>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -236,14 +343,14 @@ const AssemblyManager = ({ currentUser, systemInfo }: AssemblyManagerProps) => {
                         <form onSubmit={handleSave} className="flex flex-col h-full overflow-hidden">
                             <div className="h-20 px-10 bg-slate-900 text-white flex justify-between items-center shrink-0 shadow-2xl relative z-20 border-b border-white/5">
                                 <div className="flex items-center gap-5">
-                                    <div className="p-3.5 bg-indigo-600 rounded-xl shadow-xl"><Gavel size={22}/></div>
+                                    <div className="p-3.5 bg-indigo-600 rounded-xl shadow-xl" style={{ backgroundColor: primaryColor }}><Gavel size={22}/></div>
                                     <div>
                                         <h3 className="font-black text-xl uppercase tracking-tighter leading-none">Configurar Assembleia</h3>
                                         <p className="text-indigo-400 text-[9px] font-black uppercase mt-1.5 tracking-widest opacity-80">SRE Legislative Control Suite V5.0</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <button type="submit" disabled={isSaving} className="px-10 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-3 shadow-xl active:scale-95">
+                                    <button type="submit" disabled={isSaving} className="px-10 py-3.5 bg-indigo-600 hover:bg-indigo-50 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-3 shadow-xl active:scale-95">
                                         {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Commitar Edital
                                     </button>
                                     <button type="button" onClick={() => setIsModalOpen(false)} className="p-3.5 hover:bg-rose-500 hover:text-white text-slate-400 rounded-xl transition-all border border-white/5"><X size={24}/></button>
