@@ -197,6 +197,8 @@ export interface OfficialDocument {
   content: string;
   type: string;
   status: string;
+  // SRE FIX: Adicionada propriedade metadata para suportar persistência de configuração de layout
+  metadata?: any;
   created_at: string;
   updated_at: string;
 }

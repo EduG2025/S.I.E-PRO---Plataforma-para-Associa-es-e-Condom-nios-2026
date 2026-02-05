@@ -1,34 +1,37 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { SystemInfo, User, Incident, SurveyResponse, TacticalAnalysis } from '../types';
-import { mapService, operationsService, aiService } from '../services/api';
+import { mapService, operationsService, aiService, surveyService } from '../services/api';
 import {
   Search, Loader2, Target, Crosshair, Users, ChevronRight,
   MapPin, AlertTriangle, BrainCircuit, Activity, X,
   FileText, Zap, ShieldAlert, Satellite, RefreshCw, User as UserIcon,
-  Radar, Layers, Map as MapIcon2
+  Radar, Layers, Map as MapIcon2, Scan, Eye, Play, Pause, Filter, BarChart3, PieChart
 } from 'lucide-react';
-import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // @ts-ignore
 import { debounce } from 'lodash';
+
+// --- SRE FIX: Use Global Leaflet Instance (CDN) to ensure Plugins (Heatmap/Cluster) are attached ---
+const L = (window as any).L;
 
 // --- CORREÇÃO DE ÍCONES DO LEAFLET EM REACT (SRE Standard) ---
 const ICON_URL = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png';
 const ICON_RETINA_URL = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png';
 const SHADOW_URL = 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png';
 
-const DefaultIcon = L.icon({
-  iconUrl: ICON_URL,
-  iconRetinaUrl: ICON_RETINA_URL,
-  shadowUrl: SHADOW_URL,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+if (L) {
+    const DefaultIcon = L.icon({
+      iconUrl: ICON_URL,
+      iconRetinaUrl: ICON_RETINA_URL,
+      shadowUrl: SHADOW_URL,
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+    L.Marker.prototype.options.icon = DefaultIcon;
+}
 // -----------------------------------------------------------
 
 interface SmartMapProps {
@@ -50,9 +53,21 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
 
+  // --- SRE INTELLIGENCE LAYERS ---
+  const [activeCensusFilter, setActiveCensusFilter] = useState<string | null>(null); // ID da pergunta selecionada
+  const [activeFilterValue, setActiveFilterValue] = useState<string | null>(null); // Valor da resposta para isolamento
+  const [showLayerMenu, setShowLayerMenu] = useState(false);
+
   const [selectedDossier, setSelectedDossier] = useState<TacticalAnalysis | null>(null);
-  const [isGeneratingDossier, setIsGeneratingDossier] = useState<string | number | null>(null);
   const [isDossierOpen, setIsDossierOpen] = useState(false);
+
+  // --- SRE UPGRADE: Sentinel Mode ---
+  const [sentinelMode, setSentinelMode] = useState(false);
+  const sentinelIndexRef = useRef(0);
+  const sentinelTimerRef = useRef<any>(null);
+
+  // --- SRE UPGRADE: Viewport Stats ---
+  const [viewportStats, setViewportStats] = useState({ visibleUnits: 0, visibleIncidents: 0, riskFactor: 'BAIXO' });
 
   const [radarMode, setRadarMode] = useState(false);
   const [radarRange, setRadarRange] = useState(500);
@@ -86,21 +101,21 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
   const registry = useRef({
     // SRE Optimization: MarkerClusterGroup para alta densidade
     // @ts-ignore - Leaflet.markercluster injetado via CDN
-    markersGroup: (L as any).markerClusterGroup ? (L as any).markerClusterGroup({
+    markersGroup: (L && L.markerClusterGroup) ? L.markerClusterGroup({
         maxClusterRadius: 60,
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
         zoomToBoundsOnClick: true,
         iconCreateFunction: createClusterIcon,
         chunkedLoading: true // Performance fix para 1k+ markers
-    }) : L.layerGroup(),
-    incidentsGroup: L.layerGroup(),
-    circlesGroup: L.layerGroup(),
-    heatGroup: L.layerGroup(),
-    pingLayer: L.layerGroup(),
-    surveyGroup: L.layerGroup(),
-    searchResultGroup: L.layerGroup(),
-    radarLayer: L.layerGroup()
+    }) : (L ? L.layerGroup() : null),
+    incidentsGroup: L ? L.layerGroup() : null,
+    circlesGroup: L ? L.layerGroup() : null,
+    heatGroup: L ? L.layerGroup() : null,
+    pingLayer: L ? L.layerGroup() : null,
+    surveyGroup: L ? L.layerGroup() : null,
+    searchResultGroup: L ? L.layerGroup() : null,
+    radarLayer: L ? L.layerGroup() : null
   });
 
   const meta = useMemo(() => systemInfo?.module_metadata?.map || {}, [systemInfo]);
@@ -121,7 +136,50 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     } catch { return fallback; }
   }, [systemInfo]);
 
-  // SRE FIX: Moved parseCoords outside or useCallback to be stable for other hooks
+  // SRE: Extração de Perguntas Filtráveis (Camadas de Dados)
+  // @ts-ignore
+  const availableCensusLayers = useMemo(() => {
+      // @ts-ignore
+      if (!surveys || surveys.length === 0) return [];
+      const layers: any[] = [];
+      // @ts-ignore
+      surveys.forEach((s: any) => {
+          let questions = [];
+          try {
+              questions = typeof s.questions === 'string' ? JSON.parse(s.questions) : s.questions;
+          } catch { questions = []; }
+          
+          if(Array.isArray(questions)) {
+              questions.forEach((q: any) => {
+                  // Apenas perguntas categóricas (Select/Boolean) são úteis para colorir o mapa
+                  if (q.type === 'select' || q.type === 'boolean') {
+                      layers.push({ id: q.id, label: q.text, survey: s.title });
+                  }
+              });
+          }
+      });
+      return layers;
+  }, [surveys]);
+
+  // SRE: Cálculo de Distribuição e Cores para a Legenda
+  const censusStats = useMemo(() => {
+      if (!activeCensusFilter) return null;
+      const stats: Record<string, { count: number, color: string }> = {};
+      const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e', '#84cc16'];
+      let colorIdx = 0;
+
+      units.forEach(u => {
+          // @ts-ignore
+          const val = (u.socialData && u.socialData[activeCensusFilter]) || 'NÃO INFORMADO';
+          if (!stats[val]) {
+              stats[val] = { count: 0, color: palette[colorIdx % palette.length] };
+              colorIdx++;
+          }
+          stats[val].count++;
+      });
+      return stats;
+  }, [activeCensusFilter, units]);
+
   const parseCoords = useCallback((c: any) => {
     if (!c) return null;
     try {
@@ -138,7 +196,7 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     try {
       const promises: Promise<any>[] = [
         operationsService.getIncidents(),
-        mapService.getSurveyResponses()
+        surveyService.getAll() // Carrega estrutura das pesquisas para os filtros
       ];
 
       if (!isBIMode) {
@@ -148,6 +206,7 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       const results = await Promise.allSettled(promises);
 
       if (results[0].status === 'fulfilled') setIncidents(results[0].value.data?.data || []);
+      // @ts-ignore
       if (results[1].status === 'fulfilled') setSurveys(results[1].value.data?.data || []);
 
       if (!isBIMode && results[2] && results[2].status === 'fulfilled') {
@@ -170,7 +229,69 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     return () => clearInterval(interval);
   }, [loadData]);
 
+  // --- SRE UPGRADE: Viewport Calculation Logic ---
+  const updateViewportStats = useCallback(() => {
+      if (!mapInstanceRef.current) return;
+      const bounds = mapInstanceRef.current.getBounds();
+      
+      let uCount = 0;
+      let iCount = 0;
+      let riskScore = 0;
+
+      units.forEach(u => {
+          const c = parseCoords(u.coordinates);
+          if (c && bounds.contains([c.lat, c.lng])) {
+              uCount++;
+              // Lógica básica de risco baseada em visualização
+              if (visualizationMode === 'RISK' && JSON.stringify(u.socialData || {}).includes('BAIXA')) riskScore += 1;
+          }
+      });
+
+      incidents.forEach(i => {
+          const c = parseCoords(i.coordinates);
+          if (c && bounds.contains([c.lat, c.lng])) iCount++;
+      });
+
+      const riskLabel = riskScore > 10 ? 'CRÍTICO' : riskScore > 5 ? 'ALTO' : 'BAIXO';
+      setViewportStats({ visibleUnits: uCount, visibleIncidents: iCount, riskFactor: riskLabel });
+
+  }, [units, incidents, visualizationMode, parseCoords]);
+
+  // --- SRE UPGRADE: Sentinel Mode Logic ---
+  useEffect(() => {
+      if (sentinelMode && incidents.length > 0) {
+          const cycle = () => {
+              if (!mapInstanceRef.current) return;
+              const idx = sentinelIndexRef.current % incidents.length;
+              const incident = incidents[idx];
+              const c = parseCoords(incident.coordinates);
+              
+              if (c) {
+                  mapInstanceRef.current.flyTo([c.lat, c.lng], 17, { duration: 3 });
+                  // Highlight visual
+                  registry.current.pingLayer?.clearLayers();
+                  const pulse = L.divIcon({
+                      className: 'sentinel-pulse',
+                      html: '<div class="sentinel-ring"></div>',
+                      iconSize: [100, 100]
+                  });
+                  L.marker([c.lat, c.lng], { icon: pulse }).addTo(registry.current.pingLayer!);
+              }
+              sentinelIndexRef.current++;
+          };
+          
+          cycle(); // Immediate
+          sentinelTimerRef.current = setInterval(cycle, 10000); // Every 10s
+      } else {
+          if (sentinelTimerRef.current) clearInterval(sentinelTimerRef.current);
+          registry.current.pingLayer?.clearLayers();
+      }
+      return () => { if (sentinelTimerRef.current) clearInterval(sentinelTimerRef.current); };
+  }, [sentinelMode, incidents, parseCoords]);
+
+
   const triggerRadar = useCallback((lat: number, lng: number) => {
+    if (!L || !registry.current.radarLayer) return;
     registry.current.radarLayer.clearLayers();
 
     L.circle([lat, lng], {
@@ -198,7 +319,6 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
 
     setLastRadarCount(residentsInRadius.length);
 
-    // SRE Feedback: Alerta se zona estiver vazia
     if (residentsInRadius.length === 0) {
         setRadarAlert("NENHUM ALVO LOCALIZADO NA VARREDURA");
         setTimeout(() => setRadarAlert(null), 3500);
@@ -207,25 +327,27 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
   }, [units, radarRange, parseCoords]);
 
   const triggerPing = useCallback((lat: number, lng: number) => {
-    if (!mapInstanceRef.current) return;
+    if (!mapInstanceRef.current || !L) return;
     mapInstanceRef.current.flyTo([lat, lng], 18, { duration: 2.5 });
 
-    registry.current.pingLayer.clearLayers();
-    const pingIcon = L.divIcon({
-      className: 'sat-ping',
-      html: `<div style="border-color:${primaryColor}" class="sat-ring"></div><div style="background-color:${primaryColor}" class="sat-dot"></div>`,
-      iconSize: [80, 80]
-    });
+    if(registry.current.pingLayer) {
+        registry.current.pingLayer.clearLayers();
+        const pingIcon = L.divIcon({
+        className: 'sat-ping',
+        html: `<div style="border-color:${primaryColor}" class="sat-ring"></div><div style="background-color:${primaryColor}" class="sat-dot"></div>`,
+        iconSize: [80, 80]
+        });
 
-    L.marker([lat, lng], { icon: pingIcon }).addTo(registry.current.pingLayer);
-    setTimeout(() => registry.current.pingLayer.clearLayers(), 5000);
+        L.marker([lat, lng], { icon: pingIcon }).addTo(registry.current.pingLayer);
+        setTimeout(() => registry.current.pingLayer?.clearLayers(), 5000);
+    }
   }, [primaryColor]);
 
   useEffect(() => { if (focusCoord) triggerPing(focusCoord.lat, focusCoord.lng); }, [focusCoord, triggerPing]);
 
   // SRE Update: Handle Layer Switching
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
+    if (!mapInstanceRef.current || !L) return;
     
     if (tileLayerRef.current) {
         tileLayerRef.current.remove();
@@ -248,8 +370,7 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
   }, [layerType]);
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current) return;
-    if (!(L as any).map) return;
+    if (!mapContainerRef.current || mapInstanceRef.current || !L) return;
 
     const map = L.map(mapContainerRef.current, {
       center: [epicenter.lat, epicenter.lng],
@@ -259,8 +380,15 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       preferCanvas: true
     });
 
-    Object.values(registry.current).forEach(layer => layer.addTo(map));
+    Object.values(registry.current).forEach(layer => {
+        if(layer) layer.addTo(map);
+    });
     mapInstanceRef.current = map;
+
+    // SRE UPGRADE: Bind Move End for Viewport Stats
+    map.on('moveend', () => {
+        updateViewportStats();
+    });
 
     // Trigger initial layer load
     setLayerType('STREET'); 
@@ -275,12 +403,11 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
     observer.observe(mapContainerRef.current);
 
     return () => { observer.disconnect(); map.remove(); mapInstanceRef.current = null; };
-  }, [epicenter, rules, radarMode, triggerRadar]);
+  }, [epicenter, rules, radarMode, triggerRadar, updateViewportStats]);
 
-  // SRE FIX: performSearch wrapped in useCallback to stabilize debouncedSearch dependency
   const performSearch = useCallback(async (q: string) => {
-    if (!q.trim()) {
-      registry.current.searchResultGroup.clearLayers();
+    if (!q.trim() || !L || !registry.current.searchResultGroup) {
+      if(registry.current.searchResultGroup) registry.current.searchResultGroup.clearLayers();
       return setShowResults(false);
     }
     setIsSearching(true);
@@ -327,7 +454,7 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
                             <button id="btn-focus-${item.id}" class="w-full py-2.5 bg-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-lg"><Target size={12}/> Focar Alvo</button>
                         </div>
                     </div>`, { className: 'custom-tactic-popup' })
-          .addTo(registry.current.searchResultGroup)
+          .addTo(registry.current.searchResultGroup!)
           .on('popupopen', () => {
             document.getElementById(`btn-focus-${item.id}`)?.addEventListener('click', () => {
               triggerPing(c.lat, c.lng);
@@ -340,18 +467,13 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
 
   const debouncedSearch = useMemo(() => debounce(performSearch, 500), [performSearch]);
 
-  // SRE: HEATMAP SAFETY GUARD
-  // Isola a lógica de Heatmap para permitir validação de dimensões e re-renderização segura
   const updateHeatmap = useCallback(() => {
-      if (!mapInstanceRef.current) return;
+      if (!mapInstanceRef.current || !L || !registry.current.heatGroup) return;
       const { heatGroup } = registry.current;
-      
-      // Always clear first
       heatGroup.clearLayers();
       
-      if (!activeLayers.heatmap || !(L as any).heatLayer) return;
+      if (!activeLayers.heatmap || !L.heatLayer) return;
 
-      // SRE CRITICAL FIX: Prevent crash on hidden/zero-size canvas
       const size = mapInstanceRef.current.getSize();
       if (size.x === 0 || size.y === 0) return;
 
@@ -361,47 +483,49 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
       }).filter(Boolean);
 
       if (points.length > 0) {
-        // @ts-ignore
-        L.heatLayer(points, { radius: 30, blur: 20 }).addTo(heatGroup);
+        const heatLayer = (L as any).heatLayer(points, { radius: 30, blur: 20 });
+        if (heatLayer) heatGroup.addLayer(heatLayer);
       }
   }, [incidents, activeLayers.heatmap, parseCoords]);
 
-  // SRE: Heatmap Resize Listener
-  // Garante que o heatmap seja desenhado quando o mapa ganhar dimensões (ex: ao abrir a aba)
   useEffect(() => {
       const map = mapInstanceRef.current;
       if (!map) return;
-      
       map.on('resize', updateHeatmap);
       return () => { map.off('resize', updateHeatmap); }
   }, [updateHeatmap]);
 
+  // --- SRE UPGRADE: Split Effects for Performance ---
+  
+  // Effect 1: Marker Cluster (Heavy)
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    const { markersGroup, incidentsGroup, circlesGroup } = registry.current;
-
-    // Heatmap via Safe Update
-    updateHeatmap();
-
+    if (!mapInstanceRef.current || !L || !registry.current.markersGroup) return;
+    const { markersGroup } = registry.current;
+    
     markersGroup.clearLayers();
     if (activeLayers.residents) {
+      // Chunking logic handled by cluster plugin, but we optimize by only adding if necessary
       units.forEach(u => {
+        // SRE INTELLIGENCE: Aplica filtro se ativo
+        if (activeCensusFilter && activeFilterValue && (u as any).socialData?.[activeCensusFilter] !== activeFilterValue) return;
+
         const c = parseCoords(u.coordinates);
         if (!c) return;
 
-        const survey = surveys.find(s => s.user_id === u.id);
-        
         let markerColor = primaryColor;
+        let infoTag = '';
         
-        if (visualizationMode === 'RISK') {
+        // SRE INTELLIGENCE: Coloração dinâmica baseada no Censo
+        if (activeCensusFilter && censusStats) {
+            const val = (u as any).socialData?.[activeCensusFilter] || 'NÃO INFORMADO';
+            markerColor = censusStats[val]?.color || '#94a3b8';
+            infoTag = `<div class="mt-2 text-[9px] font-black uppercase text-white bg-slate-800 px-2 py-1 rounded w-fit">${val}</div>`;
+        } 
+        else if (visualizationMode === 'RISK') {
             const socialText = JSON.stringify(u.socialData || {}).toUpperCase();
-            if (socialText.includes('BAIXA') || socialText.includes('SIM') || socialText.includes('BOLSA')) {
-                markerColor = '#ef4444';
-            } else if (socialText.includes('MEDIA')) {
-                markerColor = '#f59e0b';
-            } else {
-                markerColor = '#10b981';
-            }
+            if (socialText.includes('BAIXA') || socialText.includes('SIM') || socialText.includes('BOLSA')) markerColor = '#ef4444';
+            else if (socialText.includes('MEDIA')) markerColor = '#f59e0b';
+            else markerColor = '#10b981';
         } else if (visualizationMode === 'AGE') {
             const age = u.age || 0;
             if (age < 18) markerColor = '#8b5cf6';
@@ -413,43 +537,23 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
 
         const icon = L.divIcon({
           className: 'marker-tatico',
-          html: `
-            <div class="relative group cursor-pointer">
-                <div style="background-color:${markerColor}" class="w-6 h-6 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-white hover:scale-110 transition-transform">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </div>
-            </div>
-          `,
+          html: `<div class="relative group cursor-pointer"><div style="background-color:${markerColor}" class="w-6 h-6 rounded-full border-2 border-white shadow-xl flex items-center justify-center text-white hover:scale-110 transition-transform"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div></div>`,
           iconSize: [24, 24],
           iconAnchor: [12, 12]
         });
 
-        const popupContent = `
-            <div class="bg-slate-900 text-white p-5 rounded-[2rem] border border-white/10 min-w-[200px] shadow-2xl">
-                <div class="flex items-center gap-3 mb-3">
-                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-indigo-400">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </div>
-                    <div>
-                        <p class="text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none">Membro</p>
-                        <h4 class="text-sm font-black uppercase leading-tight">${u.name}</h4>
-                    </div>
-                </div>
-                <div class="space-y-1 mb-4">
-                    <div class="flex justify-between text-[10px] uppercase font-bold text-slate-500 border-b border-white/5 pb-1">
-                        <span>Unidade</span>
-                        <span class="text-white">${u.unit || 'N/A'}</span>
-                    </div>
-                    <div class="flex justify-between text-[10px] uppercase font-bold text-slate-500 border-b border-white/5 pb-1">
-                        <span>Role</span>
-                        <span class="text-white">${u.role || 'RESIDENT'}</span>
-                    </div>
-                </div>
-                <button id="btn-select-${u.id}" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">
-                    Visualizar Perfil
-                </button>
-            </div>
-        `;
+        const popupContent = `<div class="bg-slate-900 text-white p-5 rounded-[2rem] border border-white/10 min-w-[200px] shadow-2xl">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-indigo-400"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+                                    <div><p class="text-[9px] font-black uppercase text-slate-400 tracking-widest leading-none">Membro</p><h4 class="text-sm font-black uppercase leading-tight">${u.name}</h4></div>
+                                </div>
+                                <div class="space-y-1 mb-4">
+                                    <div class="flex justify-between text-[10px] uppercase font-bold text-slate-500 border-b border-white/5 pb-1"><span>Unidade</span><span class="text-white">${u.unit || 'N/A'}</span></div>
+                                    <div class="flex justify-between text-[10px] uppercase font-bold text-slate-500 border-b border-white/5 pb-1"><span>Role</span><span class="text-white">${u.role || 'RESIDENT'}</span></div>
+                                    ${infoTag}
+                                </div>
+                                <button id="btn-select-${u.id}" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Visualizar Perfil</button>
+                              </div>`;
 
         const marker = L.marker([c.lat, c.lng], { icon })
           .bindPopup(popupContent, { className: 'custom-tactic-popup', closeButton: false, offset: [0, -10] })
@@ -464,10 +568,21 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         });
       });
     }
+    
+    // Update stats once after loading markers
+    setTimeout(updateViewportStats, 500);
 
-    incidentsGroup.clearLayers();
-    circlesGroup.clearLayers();
-    if (activeLayers.incidents) {
+  }, [units, activeLayers.residents, visualizationMode, primaryColor, onSelectEntity, parseCoords, activeCensusFilter, activeFilterValue, censusStats]);
+
+  // Effect 2: Incidents (Lighter)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !L) return;
+    const { incidentsGroup, circlesGroup } = registry.current;
+    
+    if (incidentsGroup) incidentsGroup.clearLayers();
+    if (circlesGroup) circlesGroup.clearLayers();
+
+    if (activeLayers.incidents && incidentsGroup && circlesGroup) {
       incidents.forEach(inc => {
         const c = parseCoords(inc.coordinates);
         if (!c) return;
@@ -486,7 +601,17 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
           .addTo(incidentsGroup);
       });
     }
-  }, [units, incidents, surveys, activeLayers, primaryColor, onSelectEntity, filteredData, visualizationMode, parseCoords, updateHeatmap]);
+    // Update stats
+    updateViewportStats();
+  }, [incidents, activeLayers.incidents, onSelectEntity, parseCoords]);
+
+  // Effect 3: Heatmap (Independent)
+  useEffect(() => {
+      updateHeatmap();
+  }, [activeLayers.heatmap, updateHeatmap]);
+
+
+  if (!L) return <div className="flex h-full items-center justify-center text-slate-400">Carregando Módulo Geoespacial...</div>;
 
   return (
     <div className="h-full w-full relative bg-[#020617] overflow-hidden flex flex-col font-sans">
@@ -517,6 +642,73 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
           </button>
       </div>
 
+      {/* --- SRE UPGRADE: VIEWPORT HUD & SENTINEL CONTROL --- */}
+      <div className="absolute top-8 right-6 z-[2000] flex flex-col items-end gap-3">
+          <div className="bg-slate-900/90 backdrop-blur-xl p-4 rounded-2xl border border-white/10 shadow-2xl text-right animate-slide-left w-64">
+              <div className="flex justify-between items-center mb-2 border-b border-white/5 pb-2">
+                  <span className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">Viewport Intel</span>
+                  <Activity size={14} className="text-emerald-500 animate-pulse"/>
+              </div>
+              <div className="flex justify-between items-center text-white">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Moradores</span>
+                  <span className="text-lg font-black">{viewportStats.visibleUnits}</span>
+              </div>
+              <div className="flex justify-between items-center text-white">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Ocorrências</span>
+                  <span className="text-lg font-black">{viewportStats.visibleIncidents}</span>
+              </div>
+              <div className="mt-2 pt-2 border-t border-white/5 flex justify-between items-center">
+                  <span className="text-[8px] uppercase font-bold text-slate-500">Risco Local</span>
+                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${viewportStats.riskFactor === 'CRÍTICO' ? 'bg-rose-500 text-white' : viewportStats.riskFactor === 'ALTO' ? 'bg-amber-50 text-black' : 'bg-emerald-500 text-white'}`}>{viewportStats.riskFactor}</span>
+              </div>
+          </div>
+
+          <div className="flex gap-2">
+              <button 
+                onClick={() => setShowLayerMenu(!showLayerMenu)}
+                className={`p-3 rounded-2xl backdrop-blur-md shadow-2xl border transition-all ${showLayerMenu ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-900/90 text-slate-400 border-white/10'}`}
+                title="Camadas de Inteligência"
+              >
+                  <Layers size={18} />
+              </button>
+              <button 
+                onClick={() => setSentinelMode(!sentinelMode)}
+                className={`p-3 rounded-2xl backdrop-blur-md shadow-2xl border transition-all ${sentinelMode ? 'bg-rose-600 border-rose-500 text-white animate-pulse' : 'bg-slate-900/90 border-white/10 text-slate-400 hover:text-white'}`}
+                title="Modo Sentinela"
+              >
+                  {sentinelMode ? <Pause size={18} /> : <Play size={18} />}
+              </button>
+          </div>
+
+          {/* SRE INTELLIGENCE LAYER MENU */}
+          {showLayerMenu && availableCensusLayers.length > 0 && (
+              <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-4 rounded-[2rem] w-72 shadow-2xl animate-slide-left max-h-[300px] overflow-y-auto custom-scrollbar">
+                  <div className="flex items-center gap-3 mb-4 px-2">
+                      <BarChart3 size={16} className="text-indigo-400"/>
+                      <span className="text-[10px] font-black uppercase text-white tracking-widest">Inteligência Censitária</span>
+                  </div>
+                  <div className="space-y-1">
+                      <button 
+                          onClick={() => { setActiveCensusFilter(null); setActiveFilterValue(null); setShowLayerMenu(false); }}
+                          className={`w-full p-3 rounded-xl text-left text-[9px] font-black uppercase transition-all ${!activeCensusFilter ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}
+                      >
+                          Padrão (Sem Filtro)
+                      </button>
+                      {availableCensusLayers.map((layer: any) => (
+                          <button 
+                              key={layer.id}
+                              onClick={() => { setActiveCensusFilter(layer.id); setActiveFilterValue(null); setShowLayerMenu(false); }}
+                              className={`w-full p-3 rounded-xl text-left text-[9px] font-black uppercase transition-all group ${activeCensusFilter === layer.id ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-white/5'}`}
+                          >
+                              <span className="block truncate">{layer.label}</span>
+                              <span className="text-[7px] opacity-60 font-bold">{layer.survey}</span>
+                          </button>
+                      ))}
+                  </div>
+              </div>
+          )}
+      </div>
+
       {showSearch && (
         <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[1000] flex gap-4 w-full max-w-2xl px-6">
           <div className="relative group flex-1">
@@ -527,7 +719,7 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
               type="text"
               placeholder={meta.placeholder || "RASTREAMENTO GLOBAL..."}
               value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); debouncedSearch(e.target.value); if (!e.target.value) { setShowResults(false); registry.current.searchResultGroup.clearLayers(); } }}
+              onChange={e => { setSearchQuery(e.target.value); debouncedSearch(e.target.value); if (!e.target.value) { setShowResults(false); registry.current.searchResultGroup?.clearLayers(); } }}
               className="w-full pl-14 pr-24 py-5 bg-slate-900/90 backdrop-blur-2xl border border-white/10 rounded-2xl text-[10px] font-black uppercase text-white tracking-[0.2em] shadow-2xl outline-none focus:border-indigo-500/50 transition-all"
             />
             {showResults && (
@@ -545,7 +737,7 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
             )}
           </div>
           <button
-            onClick={() => { setRadarMode(!radarMode); setLastRadarCount(null); registry.current.radarLayer.clearLayers(); }}
+            onClick={() => { setRadarMode(!radarMode); setLastRadarCount(null); registry.current.radarLayer?.clearLayers(); }}
             className={`p-5 rounded-2xl border transition-all ${radarMode ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-900/90 border-white/10 text-slate-400'}`}
             title="Modo Radar (Clique no Mapa para Filtrar por Raio)"
           >
@@ -554,34 +746,68 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
         </div>
       )}
 
-      {/* HUD RADAR (MANTIDO E ISOLADO) */}
-      <div className="absolute bottom-10 left-10 z-[1000] flex flex-col gap-4">
-        {radarMode && (
-          <div className="bg-slate-900/90 backdrop-blur-xl p-5 rounded-3xl border border-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] w-64 space-y-4 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <div className="flex items-center gap-2"><Radar size={14} className="text-emerald-500 animate-spin" /><span className="text-[10px] font-black text-white uppercase tracking-widest">RADAR MODE: ACTIVE</span></div>
-            </div>
-            <div className="space-y-2 text-[8px] font-black uppercase">
-              <div className="flex justify-between text-slate-500">
-                <span>Raio de Varredura</span>
-                <select value={radarRange} onChange={e => setRadarRange(Number(e.target.value))} className="bg-transparent border-none text-white outline-none cursor-pointer font-black">
-                  <option value={100} className="bg-slate-900">100m</option>
-                  <option value={500} className="bg-slate-900">500m</option>
-                  <option value={1000} className="bg-slate-900">1km</option>
-                  <option value={2000} className="bg-slate-900">2km</option>
-                </select>
+      {/* SRE SMART LEGEND HUD (DYNAMIC) */}
+      {activeCensusFilter && censusStats && (
+          <div className="absolute bottom-10 left-10 z-[1000] max-h-[300px] w-72 overflow-y-auto custom-scrollbar bg-slate-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-[2rem] shadow-2xl animate-slide-up">
+              <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3">
+                  <div className="flex items-center gap-2">
+                      <PieChart size={14} className="text-indigo-400"/>
+                      <span className="text-[9px] font-black text-white uppercase tracking-widest truncate max-w-[150px]">
+                          {availableCensusLayers.find((l:any) => l.id === activeCensusFilter)?.label || 'Legenda'}
+                      </span>
+                  </div>
+                  {activeFilterValue && (
+                      <button onClick={() => setActiveFilterValue(null)} className="text-[8px] font-bold text-rose-400 hover:text-rose-300 uppercase">Limpar Filtro</button>
+                  )}
               </div>
-              {lastRadarCount !== null && (
-                <div className="flex justify-between text-slate-500 pt-2 border-t border-white/5">
-                  <span>Últimos Nodos Detectados</span>
-                  <span className="bg-emerald-500 text-white px-2 py-0.5 rounded ml-2 text-[9px] font-black uppercase">{lastRadarCount}</span>
-                </div>
-              )}
-              <p className="text-[8px] text-slate-600 italic mt-2">Clique no mapa para varrer uma área.</p>
-            </div>
+              <div className="space-y-2">
+                  {Object.entries(censusStats).sort((a:any, b:any) => b[1].count - a[1].count).map(([key, data]: any) => (
+                      <button 
+                          key={key}
+                          onClick={() => setActiveFilterValue(activeFilterValue === key ? null : key)}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl transition-all ${activeFilterValue === key ? 'bg-white/10 border border-white/20' : 'hover:bg-white/5 border border-transparent'}`}
+                      >
+                          <div className="flex items-center gap-3 overflow-hidden">
+                              <div className="w-3 h-3 rounded-full shadow-sm shrink-0" style={{ backgroundColor: data.color }}></div>
+                              <span className={`text-[9px] font-bold uppercase truncate ${activeFilterValue === key ? 'text-white' : 'text-slate-400'}`}>{key}</span>
+                          </div>
+                          <span className="text-[9px] font-black text-white bg-white/10 px-2 py-0.5 rounded-lg">{data.count}</span>
+                      </button>
+                  ))}
+              </div>
           </div>
-        )}
-      </div>
+      )}
+
+      {/* HUD RADAR (MANTIDO E ISOLADO) */}
+      {!activeCensusFilter && (
+        <div className="absolute bottom-10 left-10 z-[1000] flex flex-col gap-4">
+            {radarMode && (
+            <div className="bg-slate-900/90 backdrop-blur-xl p-5 rounded-3xl border border-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] w-64 space-y-4 animate-in fade-in duration-300">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <div className="flex items-center gap-2"><Radar size={14} className="text-emerald-500 animate-spin" /><span className="text-[10px] font-black text-white uppercase tracking-widest">RADAR MODE: ACTIVE</span></div>
+                </div>
+                <div className="space-y-2 text-[8px] font-black uppercase">
+                <div className="flex justify-between text-slate-500">
+                    <span>Raio de Varredura</span>
+                    <select value={radarRange} onChange={e => setRadarRange(Number(e.target.value))} className="bg-transparent border-none text-white outline-none cursor-pointer font-black">
+                    <option value={100} className="bg-slate-900">100m</option>
+                    <option value={500} className="bg-slate-900">500m</option>
+                    <option value={1000} className="bg-slate-900">1km</option>
+                    <option value={2000} className="bg-slate-900">2km</option>
+                    </select>
+                </div>
+                {lastRadarCount !== null && (
+                    <div className="flex justify-between text-slate-500 pt-2 border-t border-white/5">
+                    <span>Últimos Nodos Detectados</span>
+                    <span className="bg-emerald-500 text-white px-2 py-0.5 rounded ml-2 text-[9px] font-black uppercase">{lastRadarCount}</span>
+                    </div>
+                )}
+                <p className="text-[8px] text-slate-600 italic mt-2">Clique no mapa para varrer uma área.</p>
+                </div>
+            </div>
+            )}
+        </div>
+      )}
 
       {isDossierOpen && selectedDossier && (
         <div className="absolute top-0 right-0 h-full w-full lg:w-[450px] z-[2000] bg-slate-950/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-500">
@@ -630,6 +856,16 @@ const SmartMap = ({ systemInfo, activeLayers, onSelectEntity, focusCoord, showSe
             animation: radar-sweep 1.5s infinite linear;
         }
         @keyframes radar-sweep { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(4); opacity: 0; } }
+
+        .sentinel-pulse { position: relative; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        .sentinel-ring {
+            width: 100px; height: 100px;
+            border: 4px solid #f43f5e;
+            border-radius: 50%;
+            animation: sentinel-anim 1.5s infinite ease-out;
+            opacity: 0;
+        }
+        @keyframes sentinel-anim { 0% { transform: scale(0.1); opacity: 1; } 50% { opacity: 0.8; } 100% { transform: scale(2); opacity: 0; } }
 
         .custom-tactic-popup .leaflet-popup-content-wrapper { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .custom-tactic-popup .leaflet-popup-content { margin: 0 !important; }

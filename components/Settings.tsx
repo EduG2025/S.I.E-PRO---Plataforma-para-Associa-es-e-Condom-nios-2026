@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { SystemInfo, WhatsAppConfig, AIKey, DualDesignSystem, FinancialRecord } from '../types';
-import { systemService, aiKeyService, api, planService } from '../services/api';
+import { systemService, aiKeyService, aiService, api, planService } from '../services/api';
 import { SYSTEM_PERMISSIONS, MENU_ITEMS } from '../constants';
 import {
     Settings as SettingsIcon, Building, X, Plus, Trash2, Loader2, Save,
@@ -12,7 +12,8 @@ import {
     Gift, ReceiptText, Crosshair, Server, Database, MessageSquare, Workflow, Camera, Code, RotateCcw,
     Activity, Eye, EyeOff, ClipboardList, PenTool, Globe2, Sparkles, LayoutGrid, LocateFixed, BookOpen,
     Navigation, AlertTriangle, Info, MapPin as PinIcon, RefreshCw, Activity as PulseIcon,
-    CreditCard, ArrowRight, Search, Satellite, Map as MapIcon2, PauseCircle, PlayCircle
+    CreditCard, ArrowRight, Search, Satellite, Map as MapIcon2, PauseCircle, PlayCircle, FileCode,
+    Wand2
 } from 'lucide-react';
 import StudioLab from './StudioLab';
 import WikiHub from './WikiHub';
@@ -245,7 +246,7 @@ interface SettingsProps {
 // --- COMPONENTE PRINCIPAL ---
 const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSystem, currentUser }: SettingsProps) => {
     // -- TABS & NAVIGATION --
-    const [activeTab, setActiveTab] = useState<'INFO' | 'STUDIO' | 'AI_PROVIDERS' | 'SUBSCRIPTIONS' | 'PERMISSIONS' | 'WIKI'>('INFO');
+    const [activeTab, setActiveTab] = useState<'INFO' | 'STUDIO' | 'AI_PROVIDERS' | 'AI_PROMPTS' | 'SUBSCRIPTIONS' | 'PERMISSIONS' | 'WIKI'>('INFO');
 
     // -- STATES (CORE) --
     const [isSaving, setIsSaving] = useState(false);
@@ -266,6 +267,11 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     const [editingAiKey, setEditingAiKey] = useState<Partial<AIKey> | null>(null);
     const [showKeyContent, setShowKeyContent] = useState<Record<string | number, boolean>>({});
 
+    // -- STATES (PROMPTS LIBRARY) --
+    const [prompts, setPrompts] = useState<any[]>([]);
+    const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+    const [editingPrompt, setEditingPrompt] = useState<any>(null);
+
     // -- STATES (PLANS) --
     const [plans, setPlans] = useState<any[]>([]);
     const [editingPlan, setEditingPlan] = useState<any>(null);
@@ -282,7 +288,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
         sender: '',
         footer: 'S.I.E PRO',
         gateway_url: 'https://jennyai.space/send-message',
-        webhook_url: 'https://admcacaria.jennyai.space/api/communication/whatsapp-webhook',
+        webhook_url: '',
         billing_reminder_2d: true,
         billing_reminder_1d: true,
         late_reminder: true,
@@ -294,8 +300,6 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     // -- EFFECTS --
     
     // SRE CORE: Hydrate Settings with FULL DATA (Authenticated Fetch)
-    // A prop systemInfo vem de uma rota pública (filtrada).
-    // Aqui buscamos o objeto completo para edição administrativa.
     useEffect(() => {
         const loadFullSettings = async () => {
             try {
@@ -307,7 +311,6 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                 }
             } catch (e) {
                 console.error("[SRE] Full settings hydration failed:", e);
-                // Fallback para prop se o fetch falhar
                 setLocalInfo(systemInfo);
             }
         };
@@ -321,6 +324,15 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
             const res = await aiKeyService.getAll();
             setAiKeys(res.data.data || []);
         } catch (e) { console.error("Neural Pool Offline"); }
+        finally { setIsLoadingData(false); }
+    }, []);
+
+    const loadPrompts = useCallback(async () => {
+        setIsLoadingData(true);
+        try {
+            const res = await aiService.listPrompts();
+            setPrompts(res.data.data || []);
+        } catch (e) { console.error("Prompts Library Offline"); }
         finally { setIsLoadingData(false); }
     }, []);
 
@@ -347,8 +359,9 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     useEffect(() => {
         if (activeTab === 'PERMISSIONS') loadRBAC();
         if (activeTab === 'AI_PROVIDERS') loadAiKeys();
+        if (activeTab === 'AI_PROMPTS') loadPrompts();
         if (activeTab === 'SUBSCRIPTIONS') loadPlans();
-    }, [activeTab, loadRBAC, loadAiKeys, loadPlans]);
+    }, [activeTab, loadRBAC, loadAiKeys, loadPrompts, loadPlans]);
 
     // -- LOGIC HANDLERS --
 
@@ -503,6 +516,25 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
         }
     };
 
+    const handleSavePrompt = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        try {
+            if (editingPrompt.id) {
+                await aiService.updatePrompt(editingPrompt.id, editingPrompt);
+            } else {
+                await aiService.createPrompt(editingPrompt);
+            }
+            setIsPromptModalOpen(false);
+            setEditingPrompt(null);
+            loadPrompts();
+        } catch (e) {
+            alert("Erro ao salvar prompt na biblioteca.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const togglePermission = async (role: string, permission_id: string, active: boolean) => {
         try {
             await systemService.togglePermission({ role, permission_id, active });
@@ -514,7 +546,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
 
     return (
         <div className="flex-1 flex flex-col h-full animate-fade-in overflow-hidden bg-white">
-            {/* COMPONENTE: MAP MODAL (PASSO 2) */}
+            {/* COMPONENTE: MAP MODAL */}
             {isMapModalOpen && (
                 <MapModal
                     initialCoords={localInfo.coordinates}
@@ -541,6 +573,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                         { id: 'SUBSCRIPTIONS', label: 'Assinaturas', icon: CreditCard },
                         { id: 'WIKI', label: 'Wiki Hub', icon: BookOpen },
                         { id: 'AI_PROVIDERS', label: 'Pool Neural', icon: Brain },
+                        { id: 'AI_PROMPTS', label: 'Biblioteca IA', icon: Wand2 },
                         { id: 'PERMISSIONS', label: 'Acessos RBAC', icon: ShieldAlert }
                     ].map(tab => (
                         <button
@@ -671,7 +704,6 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                 </div>
                             </div>
                             
-                            {/* SANITIZAÇÃO DE DADOS (SRE TOOL) */}
                             <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[3rem] flex items-center justify-between shadow-inner">
                                 <div className="flex items-center gap-6">
                                     <div className="p-4 bg-white rounded-2xl text-indigo-600 shadow-sm"><RefreshCw size={28} /></div>
@@ -843,6 +875,56 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                     </div>
                 )}
 
+                {/* ABA: AI PROMPTS */}
+                {activeTab === 'AI_PROMPTS' && (
+                    <div className="space-y-12 animate-fade-in max-w-7xl mx-auto pb-20">
+                        <div className="bg-slate-900 p-12 rounded-[4rem] text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-12">
+                            <div className="absolute top-0 right-0 p-8 opacity-10"><MessageSquare size={300} /></div>
+                            <div className="relative z-10">
+                                <h3 className="text-4xl font-black uppercase tracking-tightest leading-none">Biblioteca <br /> Neural</h3>
+                                <p className="text-indigo-400 text-[9px] font-black uppercase mt-4 tracking-widest flex items-center gap-2"><Sparkles size={16} /> Neural Assets Protocol V1.0</p>
+                            </div>
+                            <button onClick={() => { setEditingPrompt({ title: '', content: '', category: 'GERAL', is_favorite: 0, role_restriction: 'ALL' }); setIsPromptModalOpen(true); }} className="relative z-10 px-12 py-5 bg-white text-slate-900 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-50 transition-all flex items-center gap-4 active:scale-95">
+                                <Plus size={20} /> Injetar Prompt
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {prompts.map(prompt => (
+                                <div key={prompt.id} className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm flex flex-col group hover:shadow-xl transition-all h-full relative">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className={`p-4 rounded-2xl shadow-inner group-hover:scale-110 transition-transform ${prompt.is_favorite ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                            {prompt.is_favorite ? <Zap size={24} /> : <FileCode size={24} />}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setEditingPrompt(prompt); setIsPromptModalOpen(true); }} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit3 size={18}/></button>
+                                            <button onClick={async () => { if (confirm("Remover prompt?")) { await aiService.deletePrompt(prompt.id); loadPrompts(); } }} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={18}/></button>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-2">{prompt.title}</h3>
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <span className="text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-0.5 rounded">{prompt.category}</span>
+                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${prompt.role_restriction === 'ALL' ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600'}`}>
+                                            Cargo: {prompt.role_restriction}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 font-medium mb-8 flex-1 leading-relaxed line-clamp-4">{prompt.content}</p>
+                                    <div className="pt-6 border-t border-slate-100 flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                        <span>Snapshot {new Date(prompt.updated_at || prompt.created_at).toLocaleDateString()}</span>
+                                        {prompt.is_favorite ? <span className="text-amber-500">Favorito</span> : null}
+                                    </div>
+                                </div>
+                            ))}
+                            {prompts.length === 0 && (
+                                <div className="col-span-full py-20 text-center opacity-30">
+                                    <MessageSquare size={48} className="mx-auto mb-4"/>
+                                    <p className="text-[10px] font-black uppercase">Biblioteca de Prompts Vazia</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* ABA: PERMISSIONS */}
                 {activeTab === 'PERMISSIONS' && (
                     <div className="space-y-12 animate-fade-in max-w-7xl mx-auto pb-20">
@@ -974,7 +1056,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     <p className="text-indigo-400 text-[9px] font-black uppercase mt-1.5 tracking-widest opacity-80">Failover Pool Integration</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsAiKeyModalOpen(false)} className="p-4 hover:bg-rose-500 rounded-2xl transition-all border border-white/5"><X size={32} /></button>
+                            <button type="button" onClick={() => setIsAiKeyModalOpen(false)} className="p-4 hover:bg-rose-500 rounded-2xl transition-all border border-white/5"><X size={32} /></button>
                         </div>
                         <div className="p-12 space-y-8 bg-white rounded-b-[3rem]">
                             <form onSubmit={handleSaveAiKey} className="space-y-6">
@@ -1016,6 +1098,65 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL EDITOR DE PROMPT */}
+            {isPromptModalOpen && editingPrompt && (
+                <div className="sie-editor-overlay">
+                    <div className="sie-modal-container !h-auto !max-w-2xl self-center">
+                        <form onSubmit={handleSavePrompt}>
+                            <div className="h-24 px-10 bg-slate-900 text-white flex justify-between items-center shrink-0 border-b border-white/5 rounded-t-[3rem]">
+                                <div className="flex items-center gap-6">
+                                    <div className="p-4 bg-indigo-600 rounded-2xl shadow-xl"><MessageSquare size={28} /></div>
+                                    <div>
+                                        <h3 className="font-black text-xl uppercase tracking-tighter leading-none">Editor de Prompt</h3>
+                                        <p className="text-indigo-400 text-[9px] font-black uppercase mt-1.5 tracking-widest opacity-80">Neural Asset Configuration</p>
+                                    </div>
+                                </div>
+                                <button type="button" onClick={() => setIsPromptModalOpen(false)} className="p-4 hover:bg-rose-500 rounded-2xl transition-all border border-white/5"><X size={32} /></button>
+                            </div>
+                            <div className="p-12 space-y-8 bg-white rounded-b-[3rem]">
+                                <form onSubmit={handleSavePrompt} className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Título do Prompt</label>
+                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500 shadow-inner" placeholder="EX: RESUMO DE ATA JURÍDICA" value={editingPrompt.title} onChange={e => setEditingPrompt({...editingPrompt, title: e.target.value.toUpperCase()})} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
+                                            <input className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500" value={editingPrompt.category} onChange={e => setEditingPrompt({...editingPrompt, category: e.target.value.toUpperCase()})} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Restringir ao Cargo</label>
+                                            <select className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 text-[10px] font-black uppercase outline-none" value={editingPrompt.role_restriction} onChange={e => setEditingPrompt({...editingPrompt, role_restriction: e.target.value})}>
+                                                <option value="ALL">TODOS (IRRESTRITO)</option>
+                                                {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-end pb-2">
+                                        <label className="flex items-center gap-3 cursor-pointer group">
+                                            <div onClick={() => setEditingPrompt({...editingPrompt, is_favorite: editingPrompt.is_favorite ? 0 : 1})} className={`p-1 rounded-full transition-all ${editingPrompt.is_favorite ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                                                {editingPrompt.is_favorite ? <ToggleRight size={24} className="text-white" /> : <ToggleLeft size={24} className="text-slate-400" />}
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Favorito (Topo da Lista)</span>
+                                        </label>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Corpo de Instrução (System Prompt)</label>
+                                        <textarea rows={8} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm outline-none focus:bg-white transition-all shadow-inner" value={editingPrompt.content} onChange={e => setEditingPrompt({...editingPrompt, content: e.target.value})} placeholder="Instruções detalhadas para a IA..." />
+                                    </div>
+                                    <div className="pt-6 border-t border-slate-100 flex gap-4">
+                                        <button type="button" onClick={() => setIsPromptModalOpen(false)} className="flex-1 py-5 text-slate-400 font-black text-[10px] uppercase tracking-widest">Abortar</button>
+                                        <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-950 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3">
+                                            {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Sincronizar Prompt
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

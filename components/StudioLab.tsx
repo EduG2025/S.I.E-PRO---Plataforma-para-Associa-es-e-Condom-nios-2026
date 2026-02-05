@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Monitor, Smartphone, Wand2, Save, LayoutGrid,
@@ -23,6 +22,7 @@ import {
   FileCode,
   ClipboardCheck,
   Maximize2,
+  Minimize2,
   Columns,
   Type as TypographyIcon,
   MousePointer2 as CursorIcon,
@@ -40,8 +40,8 @@ import { DesignTokens, DualDesignSystem, SystemInfo } from '../types';
 import { MENU_ITEMS } from '../constants';
 
 /**
- * S.I.E STUDIO LAB MASTER V9.2 - SOVEREIGN DESIGN HUB
- * Visual Engine Fix: Mobile Navigation & Drawer Logic
+ * S.I.E STUDIO LAB MASTER V9.5 - SOVEREIGN DESIGN HUB
+ * Visual Engine Fix: Mobile Navigation & Immersive Fullscreen Mode
  */
 
 const PRESETS = [
@@ -98,13 +98,16 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
   const [activePlatform, setActivePlatform] = useState<'desktop' | 'mobile'>('desktop');
   const [activeMode, setActiveMode] = useState<'VISUAL' | 'SIDEBAR' | 'SEMANTIC' | 'AUDIT'>('VISUAL');
   const [activeVisualPanel, setActiveVisualPanel] = useState<'GEOMETRY' | 'TYPOGRAPHY' | 'ATMOSPHERE' | 'UI_DETAILS' | 'MOBILE_NAV'>('GEOMETRY');
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarSimCollapsed, setIsSidebarSimCollapsed] = useState(false);
   const [showSimulatedForm, setShowSimulatedForm] = useState(false);
   const [simPreset, setSimPreset] = useState(PRESETS[3]); // FHD as default for desktop edit
   const [zoomLevel, setZoomLevel] = useState(1);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // SRE: Fullscreen State
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [activeSimModuleId, setActiveSimModuleId] = useState<string>('dashboard');
   const [moduleMetadata, setModuleMetadata] = useState<any>(systemInfo.module_metadata || {});
@@ -126,11 +129,11 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
   const handleResetToDefaults = () => {
     if (!confirm("⚠️ RESTAURAR PADRÕES SRE: Isso apagará todas as customizações desta plataforma. Continuar?")) return;
     setDesignSystem(prev => {
-        if (!prev) return null;
-        return {
-            ...prev,
-            [activePlatform]: { ...DEFAULT_TOKENS }
-        };
+      if (!prev) return null;
+      return {
+        ...prev,
+        [activePlatform]: { ...DEFAULT_TOKENS }
+      };
     });
   };
 
@@ -139,17 +142,17 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
     try {
       await Promise.all([
         studioService.saveTokens(designSystem),
-        systemService.updateInfo({ 
-            ...systemInfo, 
-            module_metadata: moduleMetadata, 
-            dictionary: dictionary 
+        systemService.updateInfo({
+          ...systemInfo,
+          module_metadata: moduleMetadata,
+          dictionary: dictionary
         })
       ]);
       alert("✅ KERNEL MASTER SINCRONIZADO: Geometria e DNA Visual aplicados globalmente.");
-    } catch (e) { 
-        alert("Falha ao comitar Ledger Visual."); 
-    } finally { 
-        setIsSaving(false); 
+    } catch (e) {
+      alert("Falha ao comitar Ledger Visual.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -198,8 +201,17 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
   }, [activeSimModuleId]);
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] text-slate-800 animate-fade-in relative overflow-hidden" 
-         style={{ borderRadius: 'var(--sie-radius)', border: '1px solid #e2e8f0', boxShadow: 'var(--sie-shadow)' }}>
+    <div
+      className={`flex flex-col bg-[#f8fafc] text-slate-800 animate-fade-in relative overflow-hidden transition-all duration-500 ease-in-out ${isFullscreen
+          ? 'fixed inset-0 z-[10000] w-screen h-screen rounded-none border-none'
+          : 'h-full'
+        }`}
+      style={{
+        borderRadius: isFullscreen ? '0' : 'var(--sie-radius)',
+        border: isFullscreen ? 'none' : '1px solid #e2e8f0',
+        boxShadow: isFullscreen ? 'none' : 'var(--sie-shadow)'
+      }}
+    >
 
       <header className="h-20 px-8 bg-slate-900 flex justify-between items-center shrink-0 border-b border-white/5 z-50">
         <div className="flex items-center gap-6">
@@ -208,7 +220,7 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
           </div>
           <div>
             <h1 className="text-sm md:text-lg font-black uppercase tracking-tightest leading-none text-white">Studio Lab <span className="text-indigo-400">MASTER</span></h1>
-            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">SRE Visual Sovereign Core V9.2</p>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">SRE Visual Sovereign Core V9.5</p>
           </div>
         </div>
 
@@ -226,8 +238,17 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
         </div>
 
         <div className="flex gap-2">
+          {/* FULLSCREEN TOGGLE - SRE IMMERSION */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={`p-3 backdrop-blur-md border hover:text-white text-slate-400 rounded-xl transition-all flex items-center justify-center ${isFullscreen ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-300' : 'bg-white/5 border-white/10'}`}
+            title={isFullscreen ? "Modo Janela" : "Modo Imersivo"}
+          >
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+
           <button onClick={handleResetToDefaults} className="p-3 bg-white/5 border border-white/10 hover:bg-rose-500 hover:text-white text-slate-400 rounded-xl transition-all" title="Resetar para Padrão">
-            <RotateCcw size={16}/>
+            <RotateCcw size={16} />
           </button>
           <button onClick={handleSaveMaster} disabled={isSaving} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-2.5 rounded-xl shadow-xl transition-all font-black text-[9px] uppercase tracking-widest">
             {isSaving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />} Sincronizar Master
@@ -248,200 +269,200 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
 
           {activeMode === 'VISUAL' && (
             <div className="space-y-10 animate-fade-in pb-32">
-                <div className="flex bg-slate-100 p-1 rounded-xl mb-6 overflow-x-auto no-scrollbar">
-                    {[
-                        { id: 'GEOMETRY', label: 'Geometria', icon: Box },
-                        { id: 'TYPOGRAPHY', label: 'Tipografia', icon: TypographyIcon },
-                        { id: 'ATMOSPHERE', label: 'Atmosfera', icon: Droplets },
-                        { id: 'UI_DETAILS', label: 'Detalhes UI', icon: CursorIcon },
-                        { id: 'MOBILE_NAV', label: 'Nav Mobile', icon: Smartphone }
-                    ].map(panel => (
-                        <button key={panel.id} onClick={() => setActiveVisualPanel(panel.id as any)} className={`flex-1 min-w-[80px] py-3 rounded-lg text-[8px] font-black uppercase transition-all flex flex-col items-center gap-1 ${activeVisualPanel === panel.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                            <panel.icon size={12}/> {panel.label}
-                        </button>
-                    ))}
-                </div>
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-6 overflow-x-auto no-scrollbar">
+                {[
+                  { id: 'GEOMETRY', label: 'Geometria', icon: Box },
+                  { id: 'TYPOGRAPHY', label: 'Tipografia', icon: TypographyIcon },
+                  { id: 'ATMOSPHERE', label: 'Atmosfera', icon: Droplets },
+                  { id: 'UI_DETAILS', label: 'Detalhes UI', icon: CursorIcon },
+                  { id: 'MOBILE_NAV', label: 'Nav Mobile', icon: Smartphone }
+                ].map(panel => (
+                  <button key={panel.id} onClick={() => setActiveVisualPanel(panel.id as any)} className={`flex-1 min-w-[80px] py-3 rounded-lg text-[8px] font-black uppercase transition-all flex flex-col items-center gap-1 ${activeVisualPanel === panel.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <panel.icon size={12} /> {panel.label}
+                  </button>
+                ))}
+              </div>
 
               {activeVisualPanel === 'GEOMETRY' && (
                 <section className="space-y-6 animate-fade-in">
-                    <SectionHeader icon={Box} title="Geometria Dinâmica" />
-                    {[
-                        { label: 'Raio de Curvatura (px)', field: 'borderRadius', min: 0, max: 60 },
-                        { label: 'Padding de Conteúdo (px)', field: 'containerPadding', min: 0, max: 100 },
-                        { label: 'Padding da Viewport (px)', field: 'viewportPadding', min: 0, max: 100 },
-                        { label: 'Espaçamento Perimetral (px)', field: 'borderSpacing', min: 0, max: 100 },
-                        { label: 'Altura do Rodapé (px)', field: 'footerHeight', min: 5, max: 150 },
-                        { label: 'Encaixe de Form (Overlap)', field: 'formOverlapOffset', min: -100, max: 100 },
-                        { label: 'Altura Padrão UI (px)', field: 'inputHeight', min: 40, max: 80 },
-                        { label: 'Largura Sidebar (px)', field: 'sidebarWidth', min: 200, max: 400 },
-                        { label: 'Largura Sidebar Colapsada (px)', field: 'sidebarWidthCollapsed', min: 60, max: 120 }
-                    ].map(token => (
+                  <SectionHeader icon={Box} title="Geometria Dinâmica" />
+                  {[
+                    { label: 'Raio de Curvatura (px)', field: 'borderRadius', min: 0, max: 60 },
+                    { label: 'Padding de Conteúdo (px)', field: 'containerPadding', min: 0, max: 100 },
+                    { label: 'Padding da Viewport (px)', field: 'viewportPadding', min: 0, max: 100 },
+                    { label: 'Espaçamento Perimetral (px)', field: 'borderSpacing', min: 0, max: 100 },
+                    { label: 'Altura do Rodapé (px)', field: 'footerHeight', min: 5, max: 150 },
+                    { label: 'Encaixe de Form (Overlap)', field: 'formOverlapOffset', min: -100, max: 100 },
+                    { label: 'Altura Padrão UI (px)', field: 'inputHeight', min: 40, max: 80 },
+                    { label: 'Largura Sidebar (px)', field: 'sidebarWidth', min: 200, max: 400 },
+                    { label: 'Largura Sidebar Colapsada (px)', field: 'sidebarWidthCollapsed', min: 60, max: 120 }
+                  ].map(token => (
                     <div key={token.field} className="space-y-3 p-5 bg-slate-50 border border-slate-100 shadow-sm group hover:border-indigo-400 transition-all rounded-3xl">
-                        <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
-                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}px</span>
-                        </div>
-                        <input
-                            type="range" min={token.min} max={token.max}
-                            value={(currentTokens as any)[token.field] || 0}
-                            onChange={e => handleUpdateToken(token.field as any, parseInt(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
-                        />
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}px</span>
+                      </div>
+                      <input
+                        type="range" min={token.min} max={token.max}
+                        value={(currentTokens as any)[token.field] || 0}
+                        onChange={e => handleUpdateToken(token.field as any, parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
+                      />
                     </div>
-                    ))}
-                    <div className="p-5 bg-slate-50 border border-slate-100 shadow-sm space-y-4 rounded-3xl">
-                        <label className="flex items-center justify-between cursor-pointer group">
-                            <span className="text-[10px] font-black text-slate-500 uppercase">Centralizar Títulos Globais</span>
-                            <div onClick={() => handleUpdateToken('centerTitle', !currentTokens.centerTitle)} className={`p-1 rounded-full transition-all ${currentTokens.centerTitle ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                                {currentTokens.centerTitle ? <ToggleRight size={24} className="text-white" /> : <ToggleLeft size={24} className="text-slate-400" />}
-                            </div>
-                        </label>
-                    </div>
+                  ))}
+                  <div className="p-5 bg-slate-50 border border-slate-100 shadow-sm space-y-4 rounded-3xl">
+                    <label className="flex items-center justify-between cursor-pointer group">
+                      <span className="text-[10px] font-black text-slate-500 uppercase">Centralizar Títulos Globais</span>
+                      <div onClick={() => handleUpdateToken('centerTitle', !currentTokens.centerTitle)} className={`p-1 rounded-full transition-all ${currentTokens.centerTitle ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                        {currentTokens.centerTitle ? <ToggleRight size={24} className="text-white" /> : <ToggleLeft size={24} className="text-slate-400" />}
+                      </div>
+                    </label>
+                  </div>
                 </section>
               )}
 
               {activeVisualPanel === 'TYPOGRAPHY' && (
                 <section className="space-y-6 animate-fade-in">
-                    <SectionHeader icon={TypographyIcon} title="Escala Tipográfica" />
-                    {[
-                        { label: 'Tamanho Base (px)', field: 'fontSizeBase', min: 12, max: 24 },
-                        { label: 'Fator de Escala (Headings)', field: 'fontScale', min: 1.0, max: 2.0, step: 0.1 },
-                        { label: 'Peso das Fontes (Headings)', field: 'fontWeightHeading', min: 400, max: 900, step: 100 },
-                        { label: 'Espaçamento de Letras (Tracking)', field: 'letterSpacingBase', min: -10, max: 30 }
-                    ].map(token => (
+                  <SectionHeader icon={TypographyIcon} title="Escala Tipográfica" />
+                  {[
+                    { label: 'Tamanho Base (px)', field: 'fontSizeBase', min: 12, max: 24 },
+                    { label: 'Fator de Escala (Headings)', field: 'fontScale', min: 1.0, max: 2.0, step: 0.1 },
+                    { label: 'Peso das Fontes (Headings)', field: 'fontWeightHeading', min: 400, max: 900, step: 100 },
+                    { label: 'Espaçamento de Letras (Tracking)', field: 'letterSpacingBase', min: -10, max: 30 }
+                  ].map(token => (
                     <div key={token.field} className="space-y-3 p-5 bg-slate-50 border border-slate-100 shadow-sm group hover:border-indigo-400 transition-all rounded-3xl">
-                        <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
-                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}</span>
-                        </div>
-                        <input
-                            type="range" min={token.min} max={token.max} step={token.step || 1}
-                            value={(currentTokens as any)[token.field] || 0}
-                            onChange={e => handleUpdateToken(token.field as any, parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
-                        />
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}</span>
+                      </div>
+                      <input
+                        type="range" min={token.min} max={token.max} step={token.step || 1}
+                        value={(currentTokens as any)[token.field] || 0}
+                        onChange={e => handleUpdateToken(token.field as any, parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
+                      />
                     </div>
-                    ))}
+                  ))}
                 </section>
               )}
 
               {activeVisualPanel === 'ATMOSPHERE' && (
                 <section className="space-y-6 animate-fade-in">
-                    <SectionHeader icon={Droplets} title="Atmosfera & Cores" />
-                    <div className="grid grid-cols-2 gap-4">
+                  <SectionHeader icon={Droplets} title="Atmosfera & Cores" />
+                  <div className="grid grid-cols-2 gap-4">
                     {[
-                        { label: 'Primária', field: 'primaryColor' },
-                        { label: 'Superfície', field: 'surfaceColor' },
-                        { label: 'Sucesso', field: 'successColor' },
-                        { label: 'Erro/Perigo', field: 'dangerColor' },
-                        { label: 'Aviso', field: 'warningColor' },
-                        { label: 'Sidebar BG', field: 'sidebarBg' },
-                        { label: 'Sidebar Ativa', field: 'sidebarActiveColor' },
-                        { label: 'Sidebar Texto', field: 'sidebarTextColor' },
-                        { label: 'Sidebar Hover', field: 'sidebarHoverColor' },
-                        { label: 'Sidebar Borda', field: 'sidebarBorderColor' }
+                      { label: 'Primária', field: 'primaryColor' },
+                      { label: 'Superfície', field: 'surfaceColor' },
+                      { label: 'Sucesso', field: 'successColor' },
+                      { label: 'Erro/Perigo', field: 'dangerColor' },
+                      { label: 'Aviso', field: 'warningColor' },
+                      { label: 'Sidebar BG', field: 'sidebarBg' },
+                      { label: 'Sidebar Ativa', field: 'sidebarActiveColor' },
+                      { label: 'Sidebar Texto', field: 'sidebarTextColor' },
+                      { label: 'Sidebar Hover', field: 'sidebarHoverColor' },
+                      { label: 'Sidebar Borda', field: 'sidebarBorderColor' }
                     ].map(color => (
-                        <div key={color.field} className="p-4 bg-slate-50 border border-slate-100 shadow-sm space-y-3 group hover:border-indigo-400 transition-all rounded-3xl">
+                      <div key={color.field} className="p-4 bg-slate-50 border border-slate-100 shadow-sm space-y-3 group hover:border-indigo-400 transition-all rounded-3xl">
                         <label className="text-[8px] font-black text-slate-400 uppercase block truncate">{color.label}</label>
                         <div className="flex items-center gap-3">
-                            <input
+                          <input
                             type="color"
                             value={(currentTokens as any)[color.field] || '#000000'}
                             onChange={e => handleUpdateToken(color.field as any, e.target.value)}
                             className="w-10 h-10 rounded-lg border-none shadow-xl cursor-pointer"
-                            />
-                            <span className="text-[8px] font-mono text-slate-400 font-black">{(currentTokens as any)[color.field]}</span>
+                          />
+                          <span className="text-[8px] font-mono text-slate-400 font-black">{(currentTokens as any)[color.field]}</span>
                         </div>
-                        </div>
+                      </div>
                     ))}
-                    </div>
-                    {[
-                        { label: 'Intensidade de Sombras', field: 'shadowIntensity', min: 0, max: 0.5, step: 0.01 },
-                        { label: 'Intensidade Sombras (Cards)', field: 'cardShadowIntensity', min: 0, max: 0.5, step: 0.01 },
-                        { label: 'Opacidade do Glass (Modal)', field: 'glassOpacity', min: 0, max: 100 }
-                    ].map(token => (
+                  </div>
+                  {[
+                    { label: 'Intensidade de Sombras', field: 'shadowIntensity', min: 0, max: 0.5, step: 0.01 },
+                    { label: 'Intensidade Sombras (Cards)', field: 'cardShadowIntensity', min: 0, max: 0.5, step: 0.01 },
+                    { label: 'Opacidade do Glass (Modal)', field: 'glassOpacity', min: 0, max: 100 }
+                  ].map(token => (
                     <div key={token.field} className="space-y-3 p-5 bg-slate-50 border border-slate-100 shadow-sm group hover:border-indigo-400 transition-all rounded-3xl">
-                        <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
-                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}</span>
-                        </div>
-                        <input
-                            type="range" min={token.min} max={token.max} step={token.step || 1}
-                            value={(currentTokens as any)[token.field] || 0}
-                            onChange={e => handleUpdateToken(token.field as any, parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
-                        />
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}</span>
+                      </div>
+                      <input
+                        type="range" min={token.min} max={token.max} step={token.step || 1}
+                        value={(currentTokens as any)[token.field] || 0}
+                        onChange={e => handleUpdateToken(token.field as any, parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
+                      />
                     </div>
-                    ))}
+                  ))}
                 </section>
               )}
 
               {activeVisualPanel === 'UI_DETAILS' && (
                 <section className="space-y-6 animate-fade-in">
-                    <SectionHeader icon={CursorIcon} title="Detalhes da Interface" />
-                    {[
-                        { label: 'Raio de Borda (Botões)', field: 'buttonRadius', min: 0, max: 40 },
-                        { label: 'Peso da Fonte (Botões)', field: 'buttonWeight', min: 400, max: 900, step: 100 },
-                        { label: 'Espessura Borda (Inputs)', field: 'inputBorderWidth', min: 0, max: 5 },
-                        { label: 'Espessura Borda (Cards)', field: 'cardBorderWidth', min: 0, max: 5 },
-                        { label: 'Tamanho Ícones Sidebar', field: 'sidebarIconSize', min: 14, max: 24 }
-                    ].map(token => (
+                  <SectionHeader icon={CursorIcon} title="Detalhes da Interface" />
+                  {[
+                    { label: 'Raio de Borda (Botões)', field: 'buttonRadius', min: 0, max: 40 },
+                    { label: 'Peso da Fonte (Botões)', field: 'buttonWeight', min: 400, max: 900, step: 100 },
+                    { label: 'Espessura Borda (Inputs)', field: 'inputBorderWidth', min: 0, max: 5 },
+                    { label: 'Espessura Borda (Cards)', field: 'cardBorderWidth', min: 0, max: 5 },
+                    { label: 'Tamanho Ícones Sidebar', field: 'sidebarIconSize', min: 14, max: 24 }
+                  ].map(token => (
                     <div key={token.field} className="space-y-3 p-5 bg-slate-50 border border-slate-100 shadow-sm group hover:border-indigo-400 transition-all rounded-3xl">
-                        <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
-                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}</span>
-                        </div>
-                        <input
-                            type="range" min={token.min} max={token.max} step={token.step || 1}
-                            value={(currentTokens as any)[token.field] || 0}
-                            onChange={e => handleUpdateToken(token.field as any, parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
-                        />
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase">{token.label}</label>
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{(currentTokens as any)[token.field] || 0}</span>
+                      </div>
+                      <input
+                        type="range" min={token.min} max={token.max} step={token.step || 1}
+                        value={(currentTokens as any)[token.field] || 0}
+                        onChange={e => handleUpdateToken(token.field as any, parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-full cursor-pointer accent-indigo-600"
+                      />
                     </div>
-                    ))}
+                  ))}
                 </section>
               )}
 
               {activeVisualPanel === 'MOBILE_NAV' && (
                 <section className="space-y-6 animate-fade-in">
-                    <SectionHeader icon={Smartphone} title="Navegação Mobile Hub" />
-                    
-                    <div className="p-5 bg-slate-50 border border-slate-100 shadow-sm space-y-4 rounded-3xl">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Arquitetura de Menu</label>
-                        <div className="grid grid-cols-1 gap-2">
-                            {[
-                                { id: 'SIDEBAR', label: 'Barra Lateral (Hambúrguer)', icon: PanelLeft },
-                                { id: 'DRAWER_TOP', label: 'Top Drawer (Cascata)', icon: PanelTop },
-                                { id: 'BOTTOM_NAV', label: 'Bottom Bar (Dock)', icon: TableIcon }
-                            ].map(opt => (
-                                <button 
-                                    key={opt.id} 
-                                    onClick={() => handleUpdateToken('mobileMenuType', opt.id)}
-                                    className={`p-4 rounded-xl border text-left transition-all flex items-center gap-4 ${currentTokens.mobileMenuType === opt.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-400'}`}
-                                >
-                                    <opt.icon size={18}/>
-                                    <span className="text-[10px] font-black uppercase">{opt.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                  <SectionHeader icon={Smartphone} title="Navegação Mobile Hub" />
 
-                    <div className="p-5 bg-slate-50 border border-slate-100 shadow-sm space-y-4 rounded-3xl">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Alinhamento / Posição</label>
-                        <div className="flex bg-slate-200 p-1 rounded-xl">
-                            <button onClick={() => handleUpdateToken('mobileMenuSide', 'left')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${currentTokens.mobileMenuSide === 'left' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Esquerda</button>
-                            <button onClick={() => handleUpdateToken('mobileMenuSide', 'right')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${currentTokens.mobileMenuSide === 'right' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Direita</button>
-                        </div>
-                    </div>
-                    
-                    <div className="p-8 bg-indigo-900 text-white rounded-[2rem] shadow-xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-10"><Smartphone size={80}/></div>
-                        <h4 className="text-sm font-black uppercase relative z-10">Estado de Preview</h4>
-                        <p className="text-[9px] font-bold mt-2 opacity-60 uppercase relative z-10">Force a visualização do menu no simulador:</p>
-                        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="mt-4 w-full py-3 bg-white text-indigo-900 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">
-                            {mobileMenuOpen ? 'Fechar Preview Menu' : 'Expandir Preview Menu'}
+                  <div className="p-5 bg-slate-50 border border-slate-100 shadow-sm space-y-4 rounded-3xl">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Arquitetura de Menu</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { id: 'SIDEBAR', label: 'Barra Lateral (Hambúrguer)', icon: PanelLeft },
+                        { id: 'DRAWER_TOP', label: 'Top Drawer (Cascata)', icon: PanelTop },
+                        { id: 'BOTTOM_NAV', label: 'Bottom Bar (Dock)', icon: TableIcon }
+                      ].map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => handleUpdateToken('mobileMenuType', opt.id)}
+                          className={`p-4 rounded-xl border text-left transition-all flex items-center gap-4 ${currentTokens.mobileMenuType === opt.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-400'}`}
+                        >
+                          <opt.icon size={18} />
+                          <span className="text-[10px] font-black uppercase">{opt.label}</span>
                         </button>
+                      ))}
                     </div>
+                  </div>
+
+                  <div className="p-5 bg-slate-50 border border-slate-100 shadow-sm space-y-4 rounded-3xl">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Alinhamento / Posição</label>
+                    <div className="flex bg-slate-200 p-1 rounded-xl">
+                      <button onClick={() => handleUpdateToken('mobileMenuSide', 'left')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${currentTokens.mobileMenuSide === 'left' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Esquerda</button>
+                      <button onClick={() => handleUpdateToken('mobileMenuSide', 'right')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase transition-all ${currentTokens.mobileMenuSide === 'right' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Direita</button>
+                    </div>
+                  </div>
+
+                  <div className="p-8 bg-indigo-900 text-white rounded-[2rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><Smartphone size={80} /></div>
+                    <h4 className="text-sm font-black uppercase relative z-10">Estado de Preview</h4>
+                    <p className="text-[9px] font-bold mt-2 opacity-60 uppercase relative z-10">Force a visualização do menu no simulador:</p>
+                    <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="mt-4 w-full py-3 bg-white text-indigo-900 rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all">
+                      {mobileMenuOpen ? 'Fechar Preview Menu' : 'Expandir Preview Menu'}
+                    </button>
+                  </div>
                 </section>
               )}
             </div>
@@ -508,53 +529,53 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
           )}
 
           {activeMode === 'AUDIT' && (
-              <div className="space-y-8 animate-fade-in">
-                  <div className="p-8 bg-slate-900 rounded-3xl text-white">
-                      <div className="flex items-center gap-3 mb-4">
-                          <History size={20} className="text-indigo-400" />
-                          <h4 className="text-sm font-black uppercase">Trilha de Estilo</h4>
-                      </div>
-                      <p className="text-[9px] text-slate-400 uppercase tracking-widest leading-relaxed">Registro imutável das últimas 5 sincronizações do DNA Visual.</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                      {[
-                          { date: 'Hoje, 14:22', user: 'SRE MASTER', desc: 'Ajuste de Overlap e Raio de Borda (Desktop)' },
-                          { date: 'Ontem, 09:10', user: 'ADMIN', desc: 'Expansão da paleta de cores (Sucesso/Erro)' },
-                          { date: '22 Abr, 11:45', user: 'SRE MASTER', desc: 'Normalização de tipografia em mobile' },
-                          { date: '21 Abr, 18:30', user: 'SRE MASTER', desc: 'Setup inicial de DNA Studio Lab' }
-                      ].map((log, i) => (
-                          <div key={i} className="p-5 bg-white border border-slate-100 rounded-2xl shadow-sm space-y-2">
-                              <div className="flex justify-between items-center">
-                                  <span className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-0.5 rounded">{log.user}</span>
-                                  <span className="text-[8px] font-bold text-slate-400">{log.date}</span>
-                              </div>
-                              <p className="text-[10px] font-bold text-slate-600 uppercase leading-relaxed">{log.desc}</p>
-                          </div>
-                      ))}
-                  </div>
+            <div className="space-y-8 animate-fade-in">
+              <div className="p-8 bg-slate-900 rounded-3xl text-white">
+                <div className="flex items-center gap-3 mb-4">
+                  <History size={20} className="text-indigo-400" />
+                  <h4 className="text-sm font-black uppercase">Trilha de Estilo</h4>
+                </div>
+                <p className="text-[9px] text-slate-400 uppercase tracking-widest leading-relaxed">Registro imutável das últimas 5 sincronizações do DNA Visual.</p>
               </div>
+
+              <div className="space-y-4">
+                {[
+                  { date: 'Hoje, 14:22', user: 'SRE MASTER', desc: 'Ajuste de Overlap e Raio de Borda (Desktop)' },
+                  { date: 'Ontem, 09:10', user: 'ADMIN', desc: 'Expansão da paleta de cores (Sucesso/Erro)' },
+                  { date: '22 Abr, 11:45', user: 'SRE MASTER', desc: 'Normalização de tipografia em mobile' },
+                  { date: '21 Abr, 18:30', user: 'SRE MASTER', desc: 'Setup inicial de DNA Studio Lab' }
+                ].map((log, i) => (
+                  <div key={i} className="p-5 bg-white border border-slate-100 rounded-2xl shadow-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-0.5 rounded">{log.user}</span>
+                      <span className="text-[8px] font-bold text-slate-400">{log.date}</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-600 uppercase leading-relaxed">{log.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </aside>
 
         <main className="flex-1 bg-slate-200 p-6 md:p-12 relative flex flex-col items-center justify-center overflow-hidden">
-            {/* SIMULATOR HUD */}
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[100] flex bg-slate-900/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-2xl gap-1">
-                {PRESETS.map(preset => (
-                    <button 
-                        key={preset.id} 
-                        onClick={() => { setSimPreset(preset); setZoomLevel(preset.w > 1200 ? 0.6 : 1); }}
-                        className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase transition-all flex items-center gap-2 ${simPreset.id === preset.id ? 'bg-white text-slate-900' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        <preset.icon size={12}/> <span className="hidden sm:inline">{preset.label}</span>
-                    </button>
-                ))}
-            </div>
+          {/* SIMULATOR HUD */}
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[100] flex bg-slate-900/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-2xl gap-1">
+            {PRESETS.map(preset => (
+              <button
+                key={preset.id}
+                onClick={() => { setSimPreset(preset); setZoomLevel(preset.w > 1200 ? 0.6 : 1); }}
+                className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase transition-all flex items-center gap-2 ${simPreset.id === preset.id ? 'bg-white text-slate-900' : 'text-slate-400 hover:text-white'}`}
+              >
+                <preset.icon size={12} /> <span className="hidden sm:inline">{preset.label}</span>
+              </button>
+            ))}
+          </div>
 
-            <div className="absolute top-6 right-6 z-[100] flex bg-slate-900/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-2xl gap-4 items-center px-4">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Zoom: {Math.round(zoomLevel * 100)}%</span>
-                <input type="range" min="0.2" max="1.5" step="0.1" value={zoomLevel} onChange={e => setZoomLevel(parseFloat(e.target.value))} className="w-32 h-1 bg-slate-700 rounded-full cursor-pointer accent-indigo-500" />
-            </div>
+          <div className="absolute top-6 right-6 z-[100] flex bg-slate-900/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-2xl gap-4 items-center px-4">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Zoom: {Math.round(zoomLevel * 100)}%</span>
+            <input type="range" min="0.2" max="1.5" step="0.1" value={zoomLevel} onChange={e => setZoomLevel(parseFloat(e.target.value))} className="w-32 h-1 bg-slate-700 rounded-full cursor-pointer accent-indigo-500" />
+          </div>
 
           <div
             className="bg-white shadow-[0_80px_200px_-50px_rgba(0,0,0,0.6)] transition-all duration-700 ease-in-out relative flex flex-col overflow-hidden"
@@ -563,121 +584,121 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
               height: `${simPreset.h}px`,
               transform: `scale(${zoomLevel})`,
               borderRadius: simPreset.id.includes('mobile') ? '4rem' : 'var(--sie-radius)',
-              border: simPreset.id.includes('mobile') ? '14px solid #020617' : 'none' 
+              border: simPreset.id.includes('mobile') ? '14px solid #020617' : 'none'
             }}
           >
             <div className="flex flex-1 overflow-hidden relative" style={dynamicStyles}>
-              
+
               {/* DESKTOP SIDEBAR SIMULATED */}
               {!simPreset.id.includes('mobile') && (
                 <aside
-                    className="hidden lg:flex flex-col overflow-hidden transition-all duration-500 border-r shrink-0"
-                    style={{
+                  className="hidden lg:flex flex-col overflow-hidden transition-all duration-500 border-r shrink-0"
+                  style={{
                     width: 'var(--sidebar-w)',
                     backgroundColor: 'var(--sidebar-bg)',
                     color: 'var(--sidebar-text)',
                     borderColor: 'var(--sidebar-border)'
-                    }}
+                  }}
                 >
-                    <div className="p-8 border-b flex justify-between items-center" style={{ borderColor: 'var(--sidebar-border)' }}>
+                  <div className="p-8 border-b flex justify-between items-center" style={{ borderColor: 'var(--sidebar-border)' }}>
                     <Fingerprint size={32} style={{ color: 'var(--sidebar-active)' }} />
-                    </div>
-                    <div className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
+                  </div>
+                  <div className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
                     {MENU_ITEMS.filter(item => sidebarManifest[item.id]?.visible !== false).map(item => (
-                        <div
+                      <div
                         key={item.id}
                         onClick={() => setActiveSimModuleId(item.id)}
                         className={`p-4 rounded-xl flex items-center gap-4 cursor-pointer transition-all ${activeSimModuleId === item.id ? 'shadow-lg' : 'opacity-70'}`}
                         style={{
-                            backgroundColor: activeSimModuleId === item.id ? 'var(--sidebar-active)' : 'transparent',
-                            color: activeSimModuleId === item.id ? '#fff' : 'var(--sidebar-text)',
-                            borderRadius: 'calc(var(--radius) * 0.5)'
+                          backgroundColor: activeSimModuleId === item.id ? 'var(--sidebar-active)' : 'transparent',
+                          color: activeSimModuleId === item.id ? '#fff' : 'var(--sidebar-text)',
+                          borderRadius: 'calc(var(--radius) * 0.5)'
                         }}
-                        >
+                      >
                         <item.icon size={18} />
                         {!isSidebarSimCollapsed && (
-                            <span className="text-[10px] font-black uppercase tracking-widest truncate">
+                          <span className="text-[10px] font-black uppercase tracking-widest truncate">
                             {sidebarManifest[item.id]?.label || item.label}
-                            </span>
+                          </span>
                         )}
-                        </div>
+                      </div>
                     ))}
-                    </div>
+                  </div>
                 </aside>
               )}
 
               {/* MOBILE MENU SIMULATION (SIDEBAR) */}
               {simPreset.id.includes('mobile') && currentTokens.mobileMenuType === 'SIDEBAR' && (
-                  <div 
-                    className={`absolute inset-0 z-[300] bg-slate-950/80 backdrop-blur-md transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
-                    onClick={() => setMobileMenuOpen(false)}
+                <div
+                  className={`absolute inset-0 z-[300] bg-slate-950/80 backdrop-blur-md transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <div
+                    className={`absolute top-0 bottom-0 w-[80%] bg-slate-900 border-slate-800 transition-all duration-500 flex flex-col p-8 ${mobileMenuOpen ? 'translate-x-0' : (currentTokens.mobileMenuSide === 'right' ? 'translate-x-full' : '-translate-x-full')}`}
+                    style={{ [currentTokens.mobileMenuSide === 'right' ? 'right' : 'left']: 0, backgroundColor: 'var(--sidebar-bg)' }}
+                    onClick={e => e.stopPropagation()}
                   >
-                      <div 
-                        className={`absolute top-0 bottom-0 w-[80%] bg-slate-900 border-slate-800 transition-all duration-500 flex flex-col p-8 ${mobileMenuOpen ? 'translate-x-0' : (currentTokens.mobileMenuSide === 'right' ? 'translate-x-full' : '-translate-x-full')}`}
-                        style={{ [currentTokens.mobileMenuSide === 'right' ? 'right' : 'left']: 0, backgroundColor: 'var(--sidebar-bg)' }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                          <div className="flex justify-between items-center mb-10">
-                              <Fingerprint size={32} style={{ color: 'var(--sidebar-active)' }} />
-                              <button onClick={() => setMobileMenuOpen(false)}><X size={24} className="text-white"/></button>
-                          </div>
-                          <div className="space-y-4">
-                              {MENU_ITEMS.slice(0, 5).map(item => (
-                                  <div key={item.id} className="flex items-center gap-4 text-slate-400 p-2 font-black uppercase text-[10px] tracking-widest">
-                                      <item.icon size={18}/> {item.label}
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
+                    <div className="flex justify-between items-center mb-10">
+                      <Fingerprint size={32} style={{ color: 'var(--sidebar-active)' }} />
+                      <button onClick={() => setMobileMenuOpen(false)}><X size={24} className="text-white" /></button>
+                    </div>
+                    <div className="space-y-4">
+                      {MENU_ITEMS.slice(0, 5).map(item => (
+                        <div key={item.id} className="flex items-center gap-4 text-slate-400 p-2 font-black uppercase text-[10px] tracking-widest">
+                          <item.icon size={18} /> {item.label}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                </div>
               )}
 
               {/* MOBILE MENU SIMULATION (DRAWER_TOP) */}
               {simPreset.id.includes('mobile') && currentTokens.mobileMenuType === 'DRAWER_TOP' && (
-                  <div 
-                    className={`absolute inset-0 z-[300] bg-slate-950/80 backdrop-blur-md transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
-                    onClick={() => setMobileMenuOpen(false)}
+                <div
+                  className={`absolute inset-0 z-[300] bg-slate-950/80 backdrop-blur-md transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <div
+                    className={`absolute top-0 left-0 w-full bg-slate-900 border-b border-slate-800 transition-all duration-500 flex flex-col p-8 ${mobileMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
+                    style={{ backgroundColor: 'var(--sidebar-bg)' }}
+                    onClick={e => e.stopPropagation()}
                   >
-                      <div 
-                        className={`absolute top-0 left-0 w-full bg-slate-900 border-b border-slate-800 transition-all duration-500 flex flex-col p-8 ${mobileMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
-                        style={{ backgroundColor: 'var(--sidebar-bg)' }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                          <div className="flex justify-between items-center mb-6">
-                              <Fingerprint size={32} style={{ color: 'var(--sidebar-active)' }} />
-                              <button onClick={() => setMobileMenuOpen(false)}><X size={24} className="text-white"/></button>
-                          </div>
-                          <div className="space-y-4 max-h-[50vh] overflow-y-auto">
-                              {MENU_ITEMS.slice(0, 5).map(item => (
-                                  <div key={item.id} className="flex items-center gap-4 text-slate-400 p-3 font-black uppercase text-[10px] tracking-widest border-b border-white/5">
-                                      <item.icon size={18}/> {item.label}
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
+                    <div className="flex justify-between items-center mb-6">
+                      <Fingerprint size={32} style={{ color: 'var(--sidebar-active)' }} />
+                      <button onClick={() => setMobileMenuOpen(false)}><X size={24} className="text-white" /></button>
+                    </div>
+                    <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+                      {MENU_ITEMS.slice(0, 5).map(item => (
+                        <div key={item.id} className="flex items-center gap-4 text-slate-400 p-3 font-black uppercase text-[10px] tracking-widest border-b border-white/5">
+                          <item.icon size={18} /> {item.label}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                </div>
               )}
 
               {/* VIEWPORT PRINCIPAL SIMULADO */}
               <div className="flex-1 overflow-hidden flex flex-col relative" style={{ backgroundColor: 'var(--surface)' }}>
-                
+
                 {/* MOBILE TOP BAR (If Mobile) */}
                 {simPreset.id.includes('mobile') && (
-                    <div className="h-16 px-6 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 relative z-20">
-                         <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white"><Shield size={16}/></div>
-                             <span className="text-[10px] font-black uppercase">{systemInfo.shortName}</span>
-                         </div>
-                         {/* SRE: Menu icon only if not Bottom Nav */}
-                         {currentTokens.mobileMenuType !== 'BOTTOM_NAV' && (
-                             <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-100 rounded-lg text-slate-600"><Menu size={20}/></button>
-                         )}
+                  <div className="h-16 px-6 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 relative z-20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white"><Shield size={16} /></div>
+                      <span className="text-[10px] font-black uppercase">{systemInfo.shortName}</span>
                     </div>
+                    {/* SRE: Menu icon only if not Bottom Nav */}
+                    {currentTokens.mobileMenuType !== 'BOTTOM_NAV' && (
+                      <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-100 rounded-lg text-slate-600"><Menu size={20} /></button>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex-1 overflow-y-auto p-[var(--viewport-padding)] flex flex-col gap-10 custom-scrollbar relative">
-                  
-                  <div 
+
+                  <div
                     id="sim-panel-header"
                     className="flex justify-between items-center gap-8 bg-slate-900 p-[var(--padding-inner)] rounded-[var(--radius)] text-white shadow-2xl relative overflow-hidden shrink-0 z-10"
                     style={{ margin: 'var(--border-spacing)' }}
@@ -699,9 +720,9 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
                   </div>
 
                   <div className={`grid gap-10 relative z-10 ${simPreset.w > 1200 ? 'grid-cols-2' : 'grid-cols-1'}`} style={{ margin: 'var(--border-spacing)' }}>
-                    <div 
-                        className="bg-white p-[var(--padding-inner)] rounded-[var(--radius)] shadow-[var(--shadow)] flex flex-col justify-between min-h-[250px] group overflow-hidden relative"
-                        style={{ borderWidth: 'var(--card-border-w)', borderColor: '#e2e8f0', borderStyle: 'solid' }}
+                    <div
+                      className="bg-white p-[var(--padding-inner)] rounded-[var(--radius)] shadow-[var(--shadow)] flex flex-col justify-between min-h-[250px] group overflow-hidden relative"
+                      style={{ borderWidth: 'var(--card-border-w)', borderColor: '#e2e8f0', borderStyle: 'solid' }}
                     >
                       <div className="relative z-10 space-y-8">
                         <div>
@@ -709,100 +730,100 @@ const StudioLab = ({ systemInfo, designSystem, setDesignSystem }: {
                           <p style={{ fontSize: 'var(--font-base)' }} className="text-slate-400 font-bold uppercase mt-2 leading-relaxed">Demonstração de escala tipográfica e peso visual.</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <button 
-                                onClick={() => setShowSimulatedForm(!showSimulatedForm)} 
-                                className="w-full py-6 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all hover:brightness-110" 
-                                style={{ backgroundColor: 'var(--primary)', height: 'var(--input-h)', borderRadius: 'var(--button-radius)', fontWeight: 'var(--button-weight)' as any }}
-                            >
-                                {showSimulatedForm ? 'Fechar Form' : 'Testar Overlap'}
-                            </button>
-                            <button 
-                                className="w-full py-6 text-emerald-700 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl border-2 border-emerald-100 hover:bg-emerald-50 transition-all" 
-                                style={{ height: 'var(--input-h)', borderRadius: 'var(--button-radius)', fontWeight: 'var(--button-weight)' as any }}
-                            >
-                                Action Secundária
-                            </button>
+                          <button
+                            onClick={() => setShowSimulatedForm(!showSimulatedForm)}
+                            className="w-full py-6 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all hover:brightness-110"
+                            style={{ backgroundColor: 'var(--primary)', height: 'var(--input-h)', borderRadius: 'var(--button-radius)', fontWeight: 'var(--button-weight)' as any }}
+                          >
+                            {showSimulatedForm ? 'Fechar Form' : 'Testar Overlap'}
+                          </button>
+                          <button
+                            className="w-full py-6 text-emerald-700 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl border-2 border-emerald-100 hover:bg-emerald-50 transition-all"
+                            style={{ height: 'var(--input-h)', borderRadius: 'var(--button-radius)', fontWeight: 'var(--button-weight)' as any }}
+                          >
+                            Action Secundária
+                          </button>
                         </div>
                       </div>
                     </div>
 
-                    <div 
-                        className="bg-white p-[var(--padding-inner)] rounded-[var(--radius)] shadow-[var(--shadow)] flex flex-col justify-between min-h-[250px]"
-                        style={{ borderWidth: 'var(--card-border-w)', borderColor: '#e2e8f0', borderStyle: 'solid' }}
+                    <div
+                      className="bg-white p-[var(--padding-inner)] rounded-[var(--radius)] shadow-[var(--shadow)] flex flex-col justify-between min-h-[250px]"
+                      style={{ borderWidth: 'var(--card-border-w)', borderColor: '#e2e8f0', borderStyle: 'solid' }}
                     >
-                        <div className="space-y-6">
-                            <h4 style={{ fontSize: 'calc(var(--font-base) * 0.8)' }} className="font-black uppercase text-slate-400 tracking-widest">Inputs Parametrizados</h4>
-                            <div className="space-y-4">
-                                <input 
-                                    className="w-full h-14 px-6 bg-slate-50 border-slate-200 outline-none focus:border-indigo-500 transition-all uppercase font-black text-xs" 
-                                    style={{ height: 'var(--input-h)', borderWidth: 'var(--input-border-w)', borderStyle: 'solid', borderRadius: 'calc(var(--radius) * 0.7)' }}
-                                    placeholder="Exemplo de Input..." 
-                                />
-                                <div className="flex gap-4">
-                                    <div className="h-14 w-1/2 bg-slate-100 animate-pulse rounded-2xl"></div>
-                                    <div className="h-14 w-1/2 bg-slate-100 animate-pulse rounded-2xl"></div>
-                                </div>
-                            </div>
+                      <div className="space-y-6">
+                        <h4 style={{ fontSize: 'calc(var(--font-base) * 0.8)' }} className="font-black uppercase text-slate-400 tracking-widest">Inputs Parametrizados</h4>
+                        <div className="space-y-4">
+                          <input
+                            className="w-full h-14 px-6 bg-slate-50 border-slate-200 outline-none focus:border-indigo-500 transition-all uppercase font-black text-xs"
+                            style={{ height: 'var(--input-h)', borderWidth: 'var(--input-border-w)', borderStyle: 'solid', borderRadius: 'calc(var(--radius) * 0.7)' }}
+                            placeholder="Exemplo de Input..."
+                          />
+                          <div className="flex gap-4">
+                            <div className="h-14 w-1/2 bg-slate-100 animate-pulse rounded-2xl"></div>
+                            <div className="h-14 w-1/2 bg-slate-100 animate-pulse rounded-2xl"></div>
+                          </div>
                         </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* BOTTOM NAV SIMULATION */}
                 {simPreset.id.includes('mobile') && currentTokens.mobileMenuType === 'BOTTOM_NAV' && (
-                    <div className="h-20 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-around px-4 shrink-0 z-30">
-                         {MENU_ITEMS.slice(0, 4).map(item => (
-                             <div key={item.id} className="flex flex-col items-center gap-1 text-slate-400">
-                                 <item.icon size={20}/>
-                                 <span className="text-[7px] font-black uppercase tracking-widest">{item.label.split(' ')[0]}</span>
-                             </div>
-                         ))}
-                    </div>
+                  <div className="h-20 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-around px-4 shrink-0 z-30">
+                    {MENU_ITEMS.slice(0, 4).map(item => (
+                      <div key={item.id} className="flex flex-col items-center gap-1 text-slate-400">
+                        <item.icon size={20} />
+                        <span className="text-[7px] font-black uppercase tracking-widest">{item.label.split(' ')[0]}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
-                <footer 
-                    className="shrink-0 bg-slate-900 border-t border-white/10 px-10 flex items-center justify-between text-white z-[50]"
-                    style={{ height: 'var(--footer-h)' }}
+                <footer
+                  className="shrink-0 bg-slate-900 border-t border-white/10 px-10 flex items-center justify-between text-white z-[50]"
+                  style={{ height: 'var(--footer-h)' }}
                 >
-                    <div className="flex items-center gap-4">
-                        <Shield size={20} className="text-indigo-400" />
-                        <span className="text-[9px] font-black uppercase tracking-widest">SRE Alpha Node Online</span>
-                    </div>
+                  <div className="flex items-center gap-4">
+                    <Shield size={20} className="text-indigo-400" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">SRE Alpha Node Online</span>
+                  </div>
                 </footer>
               </div>
             </div>
-            
+
             {/* OVERLAY GLASS SIMULADO */}
             {showSimulatedForm && (
-                <div className="absolute inset-0 z-[400] bg-slate-950/80 backdrop-blur-lg flex items-center justify-center p-12">
-                    <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-scale-in" style={{ opacity: 'var(--glass-opacity)' as any }}>
-                        <div className="h-16 px-8 bg-slate-900 text-white flex justify-between items-center">
-                            <span className="text-[10px] font-black uppercase tracking-widest">Protocolo de Teste</span>
-                            <button onClick={() => setShowSimulatedForm(false)}><X size={20}/></button>
-                        </div>
-                        <div className="p-10 space-y-8">
-                             <div className="h-4 w-1/2 bg-slate-100 rounded-full"></div>
-                             <div className="h-32 w-full bg-slate-50 border border-slate-100 rounded-3xl"></div>
-                             <button className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase" style={{ backgroundColor: 'var(--primary)', borderRadius: 'var(--button-radius)' }}>Confirmar Handshake</button>
-                        </div>
-                    </div>
+              <div className="absolute inset-0 z-[400] bg-slate-950/80 backdrop-blur-lg flex items-center justify-center p-12">
+                <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-scale-in" style={{ opacity: 'var(--glass-opacity)' as any }}>
+                  <div className="h-16 px-8 bg-slate-900 text-white flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest">Protocolo de Teste</span>
+                    <button onClick={() => setShowSimulatedForm(false)}><X size={20} /></button>
+                  </div>
+                  <div className="p-10 space-y-8">
+                    <div className="h-4 w-1/2 bg-slate-100 rounded-full"></div>
+                    <div className="h-32 w-full bg-slate-50 border border-slate-100 rounded-3xl"></div>
+                    <button className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase" style={{ backgroundColor: 'var(--primary)', borderRadius: 'var(--button-radius)' }}>Confirmar Handshake</button>
+                  </div>
                 </div>
+              </div>
             )}
           </div>
         </main>
       </div>
 
-      <footer className="bg-white border-t border-slate-200 px-10 flex items-center justify-between shrink-0" 
-              style={{ height: 'var(--sie-footer-h)' }}>
+      <footer className="bg-white border-t border-slate-200 px-10 flex items-center justify-between shrink-0"
+        style={{ height: 'var(--sie-footer-h)' }}>
         <div className="flex items-center gap-10">
           <div className="flex items-center gap-4">
             <ShieldCheck size={18} className="text-indigo-600" style={{ color: 'var(--sie-primary)' }} />
-            <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">SRE Design Sovereign Hub V9.2</span>
+            <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">SRE Design Sovereign Hub V9.5</span>
           </div>
           <div className="h-5 w-px bg-slate-200"></div>
           <div className="flex items-center gap-4">
-              <Signal size={16} className="text-emerald-500 animate-pulse"/>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kernel Sincronizado: 200 OK</span>
+            <Signal size={16} className="text-emerald-500 animate-pulse" />
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kernel Sincronizado: 200 OK</span>
           </div>
         </div>
       </footer>

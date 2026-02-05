@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 const api = axios.create({
@@ -97,6 +98,7 @@ export const aiService = {
     generateDocument: (prompt: string, context?: string) => api.post('/ai/generate-document', { prompt, context }),
     listPrompts: () => api.get('/ai/prompts'),
     createPrompt: (data: any) => api.post('/ai/prompts', data),
+    updatePrompt: (id: any, data: any) => api.put(`/ai/prompts/${id}`, data),
     deletePrompt: (id: any) => api.delete(`/ai/prompts/${id}`),
 };
 
@@ -137,7 +139,6 @@ export const communicationService = {
     getSchedules: () => api.get('/communication/schedules'),
     createSchedule: (data: any) => api.post('/communication/schedules', data),
     deleteSchedule: (id: any) => api.delete(`/communication/schedules/${id}`),
-    // CRM Engine Methods
     getRules: () => api.get('/communication/rules'),
     createRule: (data: any) => api.post('/communication/rules', data),
     deleteRule: (id: any) => api.delete(`/communication/rules/${id}`),

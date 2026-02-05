@@ -1,37 +1,28 @@
-# 🧪 SCRIPT DE HIDRATAÇÃO SQL S.I.E PRO (WIKI MASTER V3 - FULL DOCUMENTATION)
+# 🧪 SCRIPT DE HIDRATAÇÃO SQL S.I.E PRO (WIKI & NEURAL ASSETS V252)
 
-Este script carrega o manual completo de operação do cluster. Essencial para que a IA (Advisor Mentor) saiba explicar cada botão e regra do sistema.
+Este script carrega o manual de operação e a **Biblioteca de Ativos Neurais** consolidada.
 
 ```sql
--- PROTOCOLO SRE: LIMPEZA E REIDRATAÇÃO COMPLETA
+-- PROTOCOLO SRE: LIMPEZA E REIDRATAÇÃO COMPLETA DE WIKI
 TRUNCATE TABLE `wiki_entries`;
 
 INSERT INTO `wiki_entries` (`category`, `title`, `slug`, `content`, `is_system`) VALUES 
--- EIXO 1: ESTRATÉGICO
 ('CORE', 'Arquitetura de Missão Crítica', 'core-architecture', 'O S.I.E PRO opera sob o protocolo SRE (Site Reliability Engineering). O Kernel é dividido em: 1. Ledger Central (Usuários), 2. Motor Neural (IA), 3. Gateway de Mensagens (WhatsApp) e 4. BI Territorial (Mapas). Toda ação gera um log imutável na tabela audit_logs.', 1),
-('CORE', 'Controle de Acesso RBAC 2.0', 'rbac-system', 'O sistema utiliza controle de acesso baseado em papéis. Administradores têm wildcard (*), enquanto Moradores e Diretores têm permissões granulares gerenciadas no Console Master. O acesso é biográfico e biométrico.', 1),
+('FINANCE', 'Ledger Financeiro e Fluxo de Caixa', 'finance-ledger', 'O módulo Financeiro utiliza o conceito de Ledger (Livro-razão). Inadimplência gera bloqueios automáticos em áreas comuns e disparos de lembretes via Messenger Bridge.', 1);
 
--- EIXO 2: FINANCEIRO (LEDGER)
-('FINANCE', 'Ledger Financeiro e Fluxo de Caixa', 'finance-ledger', 'O módulo Financeiro utiliza o conceito de Ledger (Livro-razão). Entradas (Incomes) e Saídas (Expenses) são categorizadas. Inadimplência gera bloqueios automáticos em áreas comuns e disparos de lembretes via Messenger Bridge a cada 24h de atraso.', 1),
+-- PROTOCOLO SRE: INJEÇÃO DE BIBLIOTECA NEURAL (GHOSTWRITER & ADVISOR)
+TRUNCATE TABLE `ai_prompts`;
 
--- EIXO 3: OPERACIONAL & SEGURANÇA
-('OPERATIONAL', 'Watchdog Vision: Monitoramento', 'watchdog-vision', 'Central de vigilância ativa. Suporta feeds RTSP/HTTP. Possui modos Solo (foco), Grid (mosaico) e Patrulha (alternância automática). Integrado ao Face-ID para reconhecimento biométrico de membros na portaria.', 1),
-('OPERATIONAL', 'Concierge: Portaria e Acesso', 'concierge-protocol', 'Registro forense de visitantes e encomendas. Todo visitante deve ser vinculado a uma unidade. Encomendas geram notificações automáticas para o WhatsApp do morador titular.', 1),
-('OPERATIONAL', 'Gestão de Ativos e Patrimônio', 'asset-management', 'Inventário digital de todos os bens do cluster. Permite cálculo de depreciação, registro de manutenções corretivas e vinculação de responsáveis por equipamentos específicos.', 1),
+-- 1. DOCUMENTOS (GHOSTWRITER)
+INSERT INTO `ai_prompts` (`title`, `category`, `role_restriction`, `content`, `is_favorite`) VALUES
+('CONVOCAÇÃO ASSEMBLEIA', 'DOCUMENTOS', 'PRESIDENT', 'Aja como um Secretário Jurídico. Redija uma convocação formal para Assembleia Geral Ordinária. Inclua pautas sobre aprovação de contas e eleição de conselho. Use tom solene e cite o Código Civil.', 1),
+('EDITAL DE LICITAÇÃO', 'DOCUMENTOS', 'SECRETARY_1', 'Redija um edital de licitação para contratação de serviços de vigilância armada. Especifique critérios de seleção, prazos de entrega de propostas e requisitos técnicos SRE.', 0),
+('NOTIFICAÇÃO EXTRAJUDICIAL', 'DOCUMENTOS', 'ADMIN', 'Gere uma notificação extrajudicial para um membro inadimplente há mais de 90 dias. Use tom firme porém mediador, oferecendo canais para acordo antes da judicialização.', 1),
+('RELATÓRIO DE GESTÃO', 'DOCUMENTOS', 'PRESIDENT', 'Estruture um relatório semestral de prestação de contas do Presidente. Foque nas benfeitorias realizadas, metas ESG atingidas e saúde financeira do cluster.', 0),
+('CERTIDÃO DE QUITAÇÃO', 'DOCUMENTOS', 'TREASURER_1', 'Emita um modelo de Certidão Negativa de Débitos Condominiais. O texto deve declarar que, até a presente data, a unidade não possui pendências no ledger.', 0);
 
--- EIXO 4: GOVERNANÇA & CENSO
-('GOVERNANCE', 'Censo Neural e Mapeamento', 'surveys-neural', 'O Censo coleta dados socioeconômicos e de saúde. Perguntas podem ser geradas por IA (Neural Architect). O Link Público permite coleta sem login, utilizando validação de CPF para evitar duplicidade.', 1),
-('GOVERNANCE', 'Hub de Documentos e Ghostwriter', 'document-hub', 'Repositório de atas, ofícios e regimentos. O Ghostwriter IA redige documentos baseados em contextos (atas de reunião, multas). Suporta moldes visuais (papel timbrado) customizáveis no Studio Lab.', 1),
-('GOVERNANCE', 'Assembleia Digital e Votação', 'digital-assembly', 'Plataforma de deliberação online. Suporta chat em tempo real, cálculo automático de quórum e votação secreta ou aberta. Gera atas automáticas ao final da sessão.', 1),
-
--- EIXO 5: COMUNIDADE & ESG
-('COMMUNITY', 'Marketplace Comunitário', 'marketplace-local', 'Fomento à economia circular dentro do cluster. Moradores podem anunciar bens e serviços. O contato é direto via WhatsApp Bridge sem intermediação financeira do sistema.', 1),
-('COMMUNITY', 'Messenger Bridge: WhatsApp Gateway', 'messenger-bridge', 'Ponte de comunicação ativa via JennyAI. Envia faturas, avisos de urgência e boas-vindas. Utiliza templates neurais com variáveis dinâmicas como {nome} e {unidade}.', 1),
-('ESG', 'S.I.E GREEN: Sustentabilidade', 'sie-green-esg', 'Monitoramento de eficiência hídrica e energética. Relatórios de pegada de carbono e metas de reciclagem. O cluster é auditado mensalmente para certificação ESG interna.', 1),
-
--- EIXO 6: DESIGN & UI
-('DESIGN', 'Studio Lab: Identidade Visual', 'studio-lab-guide', 'Controle total da estética. Permite alterar cores master, raios de borda, tipografia e manifestos de botões. O S.I.E é 100% responsivo, adaptando-se de telas móveis 360px a monitores 4K.', 1);
+-- 2. MENTOR (ADVISOR)
+INSERT INTO `ai_prompts` (`title`, `category`, `role_restriction`, `content`, `is_favorite`) VALUES
+('CONSULTA REGIMENTAL', 'MENTOR', 'ADMIN', 'Interprete o regimento interno sobre o uso de áreas comuns para eventos comerciais. Verifique a legalidade perante a convenção e sugira taxas de ocupação.', 1),
+('MEDIAÇÃO DE CONFLITOS', 'MENTOR', 'PRESIDENT', 'Sugira um roteiro de mediação para um conflito entre vizinhos por barulho excessivo. O foco deve ser a resolução amigável e o cumprimento das normas de silêncio.', 0);
 ```
-
----
-**Status:** 🟢 Base de Conhecimento Integral Hidratada.

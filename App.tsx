@@ -1,4 +1,3 @@
-
 import React, { useState, Suspense, lazy, useEffect, useMemo } from 'react';
 import { MENU_ITEMS, DEFAULT_SYSTEM_INFO } from './constants';
 import { SystemInfo, User, DualDesignSystem } from './types';
@@ -17,7 +16,7 @@ import LockScreen from './components/LockScreen';
 
 const ICON_MAP: Record<string, any> = {
     LayoutDashboard, Wallet, Users, Bell, ShieldAlert, CalendarClock, Settings, ClipboardList,
-    BarChart3, FileText, Gavel, Camera, Leaf, ShoppingBag, HelpCircle, Box, Brain, 
+    BarChart3, FileText, Gavel, Camera, Leaf, ShoppingBag, HelpCircle, Box, Brain,
     Fingerprint, Smartphone, UserCheck, ShieldCheck, Archive, Terminal, Car
 };
 
@@ -42,7 +41,7 @@ const Concierge = lazy(() => import('./components/Concierge'));
 const Assets = lazy(() => import('./components/Assets'));
 const Timeline = lazy(() => import('./components/Timeline'));
 const PublicSenso = lazy(() => import('./components/PublicSenso'));
-const DocumentHub = lazy(() => import('./components/DocumentHub'));
+const DocumentHub = lazy(() => import('./components/DocumentHub') as Promise<{ default: React.ComponentType<any> }>);
 const AssemblyManager = lazy(() => import('./components/AssemblyManager'));
 const ChatAssistant = lazy(() => import('./components/ChatAssistant'));
 const VehicleManagement = lazy(() => import('./components/VehicleManagement'));
@@ -76,7 +75,7 @@ const App = () => {
 
     const sidebarManifest = useMemo(() => systemInfo.module_metadata?.sidebar || {}, [systemInfo]);
 
-    const filteredMenu = useMemo(() => {
+    const filteredMenu: Record<string, any[]> = useMemo(() => {
         if (!currentUser) return {};
         const isAllowed = (item: any) => currentUser.role === 'ADMIN' || dynamicPermissions.includes('*') || dynamicPermissions.includes(item.permissionId);
         const categories: Record<string, any[]> = {};
@@ -95,11 +94,16 @@ const App = () => {
         return categories;
     }, [currentUser, dynamicPermissions, sidebarManifest, t]);
 
-    const bottomNavItems = useMemo(() => {
-        const allItems = Object.values(filteredMenu).flat();
+    // [SIE: INICIO DA ATUALIZAÇÃO]
+    // [SIE: REMOVIDO: Implementação anterior que causava erros de inferência em filteredMenu]
+    // [SIE: ADICIONADO: Tipagem explícita para bottomNavItems e casting seguro de filteredMenu]
+    const bottomNavItems: any[] = useMemo(() => {
+        const menuValues = Object.values(filteredMenu) as any[][];
+        const allItems = menuValues.flat();
         const priorityIds = ['dashboard', 'communication', 'neural_chat', 'settings'];
-        return priorityIds.map(id => allItems.find(i => i.id === id)).filter(Boolean);
+        return priorityIds.map(id => allItems.find((i: any) => i.id === id)).filter(Boolean);
     }, [filteredMenu]);
+    // [SIE: FIM DA ATUALIZAÇÃO]
 
     // 3. EFFECT HOOKS (ALWAYS CALL)
     useEffect(() => {
@@ -112,9 +116,9 @@ const App = () => {
         const initKernel = async () => {
             const token = localStorage.getItem('sie_auth_token');
             try {
-                // Tenta carregar informações do sistema (Público)
+                // Tenta carregar informações do sistema (Público - Leve)
                 const infoRes = await api.get('/public/system-info');
-                
+
                 // Checagem de Suspensão SRE (Baseada na resposta da API)
                 if (infoRes.data.license_status === 'SUSPENDED') {
                     setSystemInfo(infoRes.data);
@@ -129,28 +133,35 @@ const App = () => {
 
                 if (!isPublicCensus && token) {
                     try {
-                        const [userRes, permsRes] = await Promise.all([
+                        // SRE AUTH: Carrega dados do usuário, permissões E SYSTEM INFO COMPLETO
+                        const [userRes, permsRes, sysFullRes] = await Promise.all([
                             authService.me(),
-                            api.get('/settings/permissions/my')
+                            api.get('/settings/permissions/my'),
+                            systemService.getInfo() // Carrega todos os campos (incluindo presidência e assinaturas)
                         ]);
+                        
                         setCurrentUser(userRes.data);
                         setDynamicPermissions(permsRes.data.data || []);
+                        
+                        // Atualiza systemInfo com os dados completos (privados + públicos)
+                        if (sysFullRes.data) {
+                            setSystemInfo(prev => ({...prev, ...sysFullRes.data}));
+                        }
+                        
                         setIsAuthenticated(true);
                     } catch (authError) {
                         localStorage.removeItem('sie_auth_token');
                         setIsAuthenticated(false);
                     }
                 }
-            } catch (error) { 
+            } catch (error) {
                 console.error("Kernel Init Fail", error);
-            } finally { 
-                setIsLoading(false); 
+            } finally {
+                setIsLoading(false);
             }
         };
         initKernel();
     }, [isPublicCensus]);
-
-    // ... (Restante dos hooks e efeitos visuais)
 
     useEffect(() => {
         if (!isLoading && isAuthenticated && activeTab !== 'dashboard') {
@@ -166,7 +177,7 @@ const App = () => {
     useEffect(() => {
         if (!currentTokens) return;
         const root = document.documentElement;
-        
+
         root.style.setProperty('--sie-radius', `${currentTokens.borderRadius}px`);
         root.style.setProperty('--sie-sidebar-width', sidebarCollapsed ? `${currentTokens.sidebarWidthCollapsed || 80}px` : `${currentTokens.sidebarWidth}px`);
         root.style.setProperty('--sie-viewport-padding', `${currentTokens.viewportPadding}px`);
@@ -177,7 +188,7 @@ const App = () => {
         root.style.setProperty('--sie-font-scale', `${currentTokens.fontScale || 1.2}`);
         root.style.setProperty('--sie-form-overlap', `${currentTokens.formOverlapOffset}px`);
         root.style.setProperty('--sie-input-h', `${currentTokens.inputHeight || 56}px`);
-        
+
         root.style.setProperty('--sie-font-weight-heading', `${currentTokens.fontWeightHeading || 900}`);
         root.style.setProperty('--sie-letter-spacing', `${(currentTokens.letterSpacingBase || 0) / 100}em`);
         root.style.setProperty('--sie-button-radius', `${currentTokens.buttonRadius ?? currentTokens.borderRadius}px`);
@@ -185,7 +196,7 @@ const App = () => {
         root.style.setProperty('--sie-input-border-w', `${currentTokens.inputBorderWidth || 1}px`);
         root.style.setProperty('--sie-card-border-w', `${currentTokens.cardBorderWidth || 1}px`);
         root.style.setProperty('--sie-glass-opacity', `${(currentTokens.glassOpacity || 96) / 100}`);
-        
+
         root.style.setProperty('--sie-mobile-menu-type', currentTokens.mobileMenuType || 'SIDEBAR');
         root.style.setProperty('--sie-mobile-menu-side', currentTokens.mobileMenuSide || 'left');
 
@@ -195,7 +206,7 @@ const App = () => {
         root.style.setProperty('--sie-warning', currentTokens.warningColor || '#f59e0b');
         root.style.setProperty('--sie-surface', currentTokens.surfaceColor || '#f8fafc');
         root.style.setProperty('--sie-sidebar-bg', currentTokens.sidebarBg || '#020617');
-        root.style.setProperty('--sie-sidebar-border', currentTokens.sidebarBorderColor || 'rgba(255,255,255,0.05)');
+        root.style.setProperty('--sie-sidebar-border', currentTokens.sidebarBorderColor || 'rgba(255,255,255,0.08)');
         root.style.setProperty('--sie-sidebar-text', currentTokens.sidebarTextColor || '#94a3b8');
         root.style.setProperty('--sie-sidebar-active', currentTokens.sidebarActiveColor || currentTokens.primaryColor);
         root.style.setProperty('--sie-sidebar-hover', currentTokens.sidebarHoverColor || 'rgba(255,255,255,0.05)');
@@ -214,19 +225,25 @@ const App = () => {
     // 4. CONDITIONAL RENDERING (MUST BE AFTER ALL HOOKS)
     const handleLoginSuccess = (user: User, token: string) => {
         localStorage.setItem('sie_auth_token', token);
-        // SRE: Reload para aplicar permissões limpas
+        // SRE: Reload para aplicar permissões limpas e forçar fetch de sistema completo
         window.location.reload();
     };
 
     const renderContent = () => {
         if (!designSystem) return null;
+
+        // [SIE: INICIO DA ATUALIZAÇÃO]
+        // [SIE: REMOVIDO: const props = { ..., sidebarCollapsed }; (Versão que injetava sidebarCollapsed globalmente)]
+        // [SIE: ADICIONADO: Remoção de sidebarCollapsed do objeto padrão para passagem explícita no componente Documents]
         const props = { systemInfo, onNavigate: (tab: string) => { setActiveTab(tab); window.location.hash = tab; }, currentUser, permissions: dynamicPermissions, t, designSystem, setDesignSystem };
+
         switch (activeTab) {
             case 'dashboard': return currentUser?.role === 'RESIDENT' ? <ResidentDashboard {...props} /> : <Dashboard {...props} />;
             case 'settings': return <SettingsComp {...props} onUpdateSystemInfo={setSystemInfo} />;
             case 'users': return <UserManagement systemInfo={systemInfo} />;
             case 'operations': return <Operations systemInfo={systemInfo} />;
             case 'demographics': return <DemographicAnalysis {...props} />;
+            // [SIE: ADICIONADO: Passagem explícita de sidebarCollapsed apenas para DocumentHub]
             case 'documents': return <DocumentHub {...props} sidebarCollapsed={sidebarCollapsed} />;
             case 'assemblies': return <AssemblyManager {...props} />;
             case 'neural_chat': return <ChatAssistant systemInfo={systemInfo} />;
@@ -246,10 +263,11 @@ const App = () => {
             case 'vehicles': return <VehicleManagement systemInfo={systemInfo} />;
             default: return <Dashboard {...props} />;
         }
+        // [SIE: FIM DA ATUALIZAÇÃO]
     };
 
     if (isLoading) return <div className="h-screen w-screen flex items-center justify-center bg-[#020617]"><Loader2 className="animate-spin text-indigo-50" size={64} /></div>;
-    
+
     // SRE: Bloqueio Financeiro (Kill Switch UI)
     // Permite login de ADMIN para desbloqueio, mas bloqueia UI normal para outros
     if (isSuspended && (!isAuthenticated || (currentUser?.role !== 'ADMIN'))) {
@@ -278,8 +296,8 @@ const App = () => {
     const mobileMenuType = currentTokens?.mobileMenuType || 'SIDEBAR';
     const mobileMenuSide = currentTokens?.mobileMenuSide || 'left';
     const shouldShowSidebar = !isMobileView || (mobileMenuType !== 'BOTTOM_NAV');
-    
-    const sidebarContainerClass = isMobileView 
+
+    const sidebarContainerClass = isMobileView
         ? mobileMenuType === 'DRAWER_TOP'
             ? `fixed top-0 left-0 w-full max-h-[85vh] z-[200] border-b border-white/10 transition-transform duration-500 ease-out ${sidebarOpen ? 'translate-y-0 shadow-2xl' : '-translate-y-full'}`
             : `fixed inset-y-0 ${mobileMenuSide === 'right' ? 'right-0 border-l' : 'left-0 border-r'} w-[85%] z-[200] transition-transform duration-300 ${sidebarOpen ? 'translate-x-0 shadow-2xl' : (mobileMenuSide === 'right' ? 'translate-x-full' : '-translate-x-full')}`
@@ -287,11 +305,11 @@ const App = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden bg-[var(--sie-surface)]">
-            
+
             {/* BACKDROP FOR MOBILE SIDEBAR/DRAWER */}
             {isMobileView && sidebarOpen && (
-                <div 
-                    className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[190] animate-fade-in" 
+                <div
+                    className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[190] animate-fade-in"
                     onClick={() => setSidebarOpen(false)}
                 />
             )}
@@ -312,10 +330,10 @@ const App = () => {
                                 </div>
                             )}
                         </div>
-                        
+
                         {/* Mobile Close Button */}
                         {isMobileView && (
-                            <button onClick={() => setSidebarOpen(false)} className="p-2 text-white/50 hover:text-white"><X size={24}/></button>
+                            <button onClick={() => setSidebarOpen(false)} className="p-2 text-white/50 hover:text-white"><X size={24} /></button>
                         )}
 
                         {/* Desktop Collapse Button */}
@@ -325,7 +343,7 @@ const App = () => {
                             </button>
                         )}
                     </div>
-                    
+
                     {/* Clock (Desktop Only) */}
                     {!isMobileView && (
                         <div className={`px-4 py-2 ${sidebarCollapsed ? 'hidden' : ''}`}>
@@ -340,9 +358,9 @@ const App = () => {
                                 {!sidebarCollapsed && <h5 className="px-4 mb-2 text-[8px] font-black uppercase tracking-[0.4em] opacity-40 text-slate-400">{t(category)}</h5>}
                                 <div className="space-y-0.5">
                                     {items.map(item => (
-                                        <button key={item.id} onClick={() => { setActiveTab(item.id); window.location.hash = item.id; if(isMobileView) setSidebarOpen(false); }} 
+                                        <button key={item.id} onClick={() => { setActiveTab(item.id); window.location.hash = item.id; if (isMobileView) setSidebarOpen(false); }}
                                             className={`sidebar-item w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${activeTab === item.id ? 'shadow-xl text-white' : 'hover:bg-[var(--sie-sidebar-hover)]'}`}
-                                            style={{ 
+                                            style={{
                                                 borderRadius: 'var(--sie-radius)',
                                                 backgroundColor: activeTab === item.id ? 'var(--sie-sidebar-active)' : 'transparent',
                                                 color: activeTab === item.id ? '#ffffff' : 'var(--sie-sidebar-text)'
@@ -373,7 +391,7 @@ const App = () => {
                     <div className="bg-rose-600 text-white p-2 text-center text-[10px] font-black uppercase tracking-widest flex justify-between items-center px-4">
                         <span>⚠️ MODO DE SEGURANÇA: SISTEMA SUSPENSO. ACESSO RESTRITO AO ADMINISTRADOR.</span>
                         <button onClick={async () => {
-                            if(confirm('Reativar licença do sistema?')) {
+                            if (confirm('Reativar licença do sistema?')) {
                                 await api.post('/settings/toggle-license', { status: 'ACTIVE' });
                                 window.location.reload();
                             }
@@ -384,12 +402,12 @@ const App = () => {
                 <div className="sie-viewport-content custom-scrollbar pb-24 lg:pb-0">
                     <Suspense fallback={<div className="flex-1 flex flex-col items-center justify-center p-20"><Loader2 className="animate-spin text-indigo-600" size={48} /></div>}>{renderContent()}</Suspense>
                 </div>
-                
+
                 {/* MOBILE TRIGGER */}
                 {isMobileView && mobileMenuType !== 'BOTTOM_NAV' && (
-                    <button 
-                        onClick={() => setSidebarOpen(true)} 
-                        className={`lg:hidden fixed bottom-6 z-[100] p-4 bg-slate-900 text-white rounded-full shadow-2xl transition-all active:scale-95 ${mobileMenuSide === 'right' ? 'right-6' : 'left-6'}`} 
+                    <button
+                        onClick={() => setSidebarOpen(true)}
+                        className={`lg:hidden fixed bottom-6 z-[100] p-4 bg-slate-900 text-white rounded-full shadow-2xl transition-all active:scale-95 ${mobileMenuSide === 'right' ? 'right-6' : 'left-6'}`}
                         style={{ borderRadius: 'var(--sie-radius)' }}
                     >
                         <Menu size={24} />
@@ -399,9 +417,11 @@ const App = () => {
                 {/* BOTTOM NAVIGATION BAR */}
                 {isMobileView && mobileMenuType === 'BOTTOM_NAV' && (
                     <div className="fixed bottom-0 left-0 w-full h-20 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.1)] flex items-center justify-around z-[150] pb-2">
-                        {bottomNavItems.map((item: any) => (
-                            <button 
-                                key={item.id} 
+                        {/* [SIE: INICIO DA ATUALIZAÇÃO] */}
+                        {/* [SIE: ADICIONADO: Casting explícito (bottomNavItems as any[])] */}
+                        {(bottomNavItems as any[]).map((item: any) => (
+                            <button
+                                key={item.id}
                                 onClick={() => { setActiveTab(item.id); window.location.hash = item.id; }}
                                 className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}
                             >
@@ -411,8 +431,9 @@ const App = () => {
                                 <span className="text-[9px] font-black uppercase tracking-tight">{item.label.split(' ')[0]}</span>
                             </button>
                         ))}
-                        <button 
-                            onClick={() => setSidebarOpen(true)} 
+                        {/* [SIE: FIM DA ATUALIZAÇÃO] */}
+                        <button
+                            onClick={() => setSidebarOpen(true)}
                             className="flex flex-col items-center justify-center gap-1 p-2 text-slate-400"
                         >
                             <MoreHorizontal size={24} />
@@ -423,27 +444,30 @@ const App = () => {
 
                 {/* BOTTOM NAV EXPANDED MENU */}
                 {isMobileView && mobileMenuType === 'BOTTOM_NAV' && sidebarOpen && (
-                     <div className="fixed inset-0 z-[200] flex flex-col justify-end">
+                    <div className="fixed inset-0 z-[200] flex flex-col justify-end">
                         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setSidebarOpen(false)}></div>
                         <div className="bg-white rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto relative animate-slide-up shadow-2xl">
                             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-8"></div>
                             <div className="grid grid-cols-4 gap-4 mb-8">
-                                {Object.values(filteredMenu).flat().map((item: any) => (
-                                    <button 
-                                        key={item.id} 
+                                {/* [SIE: INICIO DA ATUALIZAÇÃO] */}
+                                {/* [SIE: ADICIONADO: Casting explícito para Object.values em TypeScript] */}
+                                {(Object.values(filteredMenu) as any[]).flat().map((item: any) => (
+                                    <button
+                                        key={item.id}
                                         onClick={() => { setActiveTab(item.id); window.location.hash = item.id; setSidebarOpen(false); }}
                                         className={`flex flex-col items-center gap-2 p-3 rounded-2xl border ${activeTab === item.id ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
                                     >
-                                        <item.icon size={24}/>
+                                        <item.icon size={24} />
                                         <span className="text-[8px] font-black uppercase text-center leading-tight">{item.label}</span>
                                     </button>
                                 ))}
+                                {/* [SIE: FIM DA ATUALIZAÇÃO] */}
                             </div>
                             <button onClick={() => { localStorage.removeItem('sie_auth_token'); window.location.reload(); }} className="w-full py-4 bg-slate-100 text-rose-500 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2">
-                                <LogOut size={16}/> Encerrar Sessão
+                                <LogOut size={16} /> Encerrar Sessão
                             </button>
                         </div>
-                     </div>
+                    </div>
                 )}
             </main>
         </div>
