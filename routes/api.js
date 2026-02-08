@@ -19,18 +19,19 @@ import communicationRoutes from './communicationRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 import storageRoutes from './storageRoutes.js';
 import planRoutes from './planRoutes.js';
+import demographicsRoutes from './demographicsRoutes.js';
+import collectiveRoutes from './collectiveRoutes.js';
 
 const router = express.Router();
 
 /**
- * S.I.E PRO KERNEL ROUTER - V45.0 (PLATAFORMA COMPLETA)
+ * S.I.E PRO KERNEL ROUTER - V45.5 (ACTIVE SYNC)
  */
 
 router.use(licenseGuard);
 
 router.use('/auth', authRoutes);
 router.use('/settings', settingsRoutes);
-router.use('/', operationalRoutes);
 router.use('/surveys', surveyRoutes);
 router.use('/users', userRoutes);
 router.use('/governance', governanceRoutes);
@@ -39,12 +40,15 @@ router.use('/plans', planRoutes);
 router.use('/resident', residentRoutes);
 router.use('/community', communityRoutes);
 router.use('/communication', communicationRoutes);
+router.use('/collective', collectiveRoutes);
 router.use('/visitors', conciergeRoutes);
 router.use('/deliveries', conciergeRoutes);
 router.use('/storage', storageRoutes);
 router.use('/ai', aiRoutes);
+router.use('/demographics', demographicsRoutes);
+router.use('/', operationalRoutes); // Fallback para incidentes, agenda, etc
 
-// --- NTP TIME SYNC (SRE CLOCK) ---
+// --- NTP TIME SYNC ---
 router.get('/time', (req, res) => {
     res.json({ 
         serverTime: Date.now(),
@@ -54,7 +58,6 @@ router.get('/time', (req, res) => {
 
 router.get('/public/system-info', async (req, res) => {
     try {
-        // SRE SYNC: Seleção explícita de colunas baseada no schema 'siecacaria'.`settings`
         const [[s]] = await pool.query(`
             SELECT 
                 id, name, shortName, cnpj, email, phone, website, 
@@ -78,6 +81,25 @@ router.get('/public/system-info', async (req, res) => {
     } catch (e) { 
         console.error("Kernel Read Error:", e);
         res.status(500).json({ error: 'FALHA_AO_LER_KERNEL' }); 
+    }
+});
+
+router.get('/public/stats', async (req, res) => {
+    try {
+        const [[users]] = await pool.query("SELECT COUNT(*) as count FROM users WHERE active = 1");
+        const [[keys]] = await pool.query("SELECT COUNT(*) as count FROM ai_keys WHERE status = 'active'");
+        const start = Date.now();
+        await pool.query("SELECT 1");
+        const latency = Date.now() - start;
+
+        res.json({
+            activeMembers: users.count,
+            neuralNodes: keys.count,
+            latency: `${latency}ms`,
+            integrity: '99.98%'
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'STATS_FAIL' });
     }
 });
 

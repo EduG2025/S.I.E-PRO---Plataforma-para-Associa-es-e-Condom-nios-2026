@@ -1,6 +1,6 @@
 {
-  "name": "S.I.E PRO - Plataforma para Associações e Condomínios 2026",
-  "description": "Plataforma para Associações e Condomínios. Integrado com IA - 2026",
+  "name": "S.I.E — Sistema Inteligente Ativo para Associações, Condomínios e Gestão Coletiva",
+  "description": "Plataforma de Governança de Missão Crítica para Associações e Condomínios. Integrado com IA Gemini 3 Pro - 2026",
   "requestFramePermissions": [
     "camera",
     "microphone",

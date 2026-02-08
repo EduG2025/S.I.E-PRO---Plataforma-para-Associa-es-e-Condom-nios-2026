@@ -1,16 +1,20 @@
+
 import { 
   LayoutDashboard, Wallet, Users, Bell, ShieldAlert, CalendarClock, 
   Settings, ClipboardList, BarChart3, Shield, FileText, Gavel, 
   MessageSquareText, Calendar, Camera, Leaf, ShoppingBag, 
   Megaphone, HelpCircle, Box, Monitor, Brain, Fingerprint, Smartphone,
   UserCheck, ShieldCheck, Archive, GraduationCap, Heart, Stethoscope, Plane,
-  Gamepad, Activity, Bus, Coins, Siren, HardHat, Users2, Car
+  Gamepad, Activity, Bus, Coins, Siren, HardHat, Users2, Car, Palette,
+  Scale, Smartphone as WalletIcon, Terminal
 } from 'lucide-react';
 import { SystemInfo } from './types';
 
 export const MENU_ITEMS = [
   // ESTRATÉGICO
   { id: 'dashboard', label: 'Comando Central', icon: LayoutDashboard, permissionId: 'view_dashboard', category: 'ESTRATÉGICO' },
+  { id: 'wallet', label: 'Carteira Digital', icon: WalletIcon, permissionId: 'view_dashboard', category: 'ESTRATÉGICO' },
+  { id: 'collective_decisions', label: 'Decisões Coletivas', icon: Scale, permissionId: 'manage_assemblies', category: 'ESTRATÉGICO' },
   { id: 'messenger_bridge', label: 'Messenger Bridge', icon: Smartphone, permissionId: 'manage_communication', category: 'ESTRATÉGICO' },
   { id: 'neural_chat', label: 'Mentor Neural', icon: Brain, permissionId: 'use_ai_chat', category: 'ESTRATÉGICO' },
   { id: 'id_system', label: 'Emissor de ID', icon: Fingerprint, permissionId: 'manage_users', category: 'ESTRATÉGICO' },
@@ -40,11 +44,13 @@ export const MENU_ITEMS = [
   { id: 'suggestions', label: 'Ouvidoria Digital', icon: HelpCircle, permissionId: 'send_suggestions', category: 'COMUNIDADE' },
   
   // SISTEMA
+  { id: 'sre_monitor', label: 'Monitor SRE', icon: Terminal, permissionId: 'manage_settings', category: 'SISTEMA' },
+  { id: 'studio_lab', label: 'Studio Lab', icon: Palette, permissionId: 'manage_settings', category: 'SISTEMA' },
   { id: 'settings', label: 'Console Master', icon: Settings, permissionId: 'manage_settings', category: 'SISTEMA' },
 ];
 
 export const DEFAULT_SYSTEM_INFO: SystemInfo = {
-  name: 'S.I.E PRO — SISTEMA INTELIGENTE ATIVO',
+  name: 'S.I.E — SISTEMA INTELIGENTE ATIVO PARA ASSOCIAÇÕES, CONDOMÍNIOS E GESTÃO COLETIVA',
   shortName: 'S.I.E PRO',
   cnpj: '00.000.000/0001-00',
   address: 'Sede Administrativa Central',

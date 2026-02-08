@@ -6,119 +6,34 @@ import { authenticateToken, checkPermission } from '../middlewares/auth.js';
 
 const router = express.Router();
 
-/**
- * MURAL DE AVISOS (NOTICES)
- * Utiliza o Motor Genérico para CRUD rápido.
- */
+// Handlers genéricos para redundância
 const noticeHandlers = createHandlers('notices');
 
-// Visualização (Membros/Geral)
-router.get('/notices', 
-    authenticateToken, 
-    checkPermission('view_dashboard'), 
-    noticeHandlers.getAll
-);
+router.get('/notices', authenticateToken, checkPermission('view_dashboard'), noticeHandlers.getAll);
+router.post('/notices', authenticateToken, checkPermission('manage_communication'), noticeHandlers.create);
+router.put('/notices/:id', authenticateToken, checkPermission('manage_communication'), noticeHandlers.update);
+router.delete('/notices/:id', authenticateToken, checkPermission('manage_communication'), noticeHandlers.delete);
 
-// Gestão de Avisos (Admin/Comunicação)
-router.post('/notices', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    noticeHandlers.create
-);
+// Template Engine
+router.get('/templates', authenticateToken, checkPermission('manage_communication'), commController.getTemplates);
+router.post('/templates', authenticateToken, checkPermission('manage_communication'), commController.saveTemplate);
+router.delete('/templates/:id', authenticateToken, checkPermission('manage_communication'), commController.deleteTemplate);
 
-router.put('/notices/:id', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    noticeHandlers.update
-);
+// WhatsApp Engine
+router.post('/whatsapp-broadcast', authenticateToken, checkPermission('manage_communication'), commController.whatsappBroadcast);
+router.post('/survey-broadcast', authenticateToken, checkPermission('manage_communication'), commController.surveyBroadcast);
+router.post('/whatsapp-webhook', commController.receiveWebhook);
 
-router.delete('/notices/:id', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    noticeHandlers.delete
-);
+// Scheduler
+router.get('/schedules', authenticateToken, checkPermission('manage_communication'), commController.getSchedules);
+router.post('/schedules', authenticateToken, checkPermission('manage_communication'), commController.createSchedule);
+router.delete('/schedules/:id', authenticateToken, checkPermission('manage_communication'), commController.deleteSchedule);
 
-/**
- * MESSAGE TEMPLATES
- * Gestão de modelos para automação de mensagens (Boas-vindas, Censo, etc)
- */
-router.get('/templates', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.getTemplates
-);
-
-router.post('/templates', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.saveTemplate
-);
-
-router.delete('/templates/:id', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.deleteTemplate
-);
-
-/**
- * WHATSAPP ENGINE (BROADCAST & WEBHOOK)
- */
-
-// Disparo em massa (Protegido por permissão de gestão)
-router.post('/whatsapp-broadcast', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.whatsappBroadcast
-);
-
-// Disparo de Pesquisas (Novo endpoint do Passo 2)
-router.post('/survey-broadcast', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.surveyBroadcast
-);
-
-/**
- * WHATSAPP WEBHOOK (INBOUND)
- * Rota pública para integração com Gateway (JennyAI / Evolution API).
- * A segurança deve ser tratada via TOKEN no header dentro do controller.
- */
-router.post('/whatsapp-webhook', 
-    commController.receiveWebhook
-);
-
-/**
- * SRE SCHEDULER (MENSAGENS AGENDADAS)
- * Motor de CRON para disparos programados
- */
-router.get('/schedules', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.getSchedules
-);
-
-router.post('/schedules', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.createSchedule
-);
-
-router.delete('/schedules/:id', 
-    authenticateToken, 
-    checkPermission('manage_communication'), 
-    commController.deleteSchedule
-);
-
-// =========================================================================
-// CRM & AUTOMATION ENGINE ROUTING (NEW)
-// =========================================================================
-
-// Rules Management
+// CRM Automation
 router.get('/rules', authenticateToken, checkPermission('manage_communication'), commController.getRules);
 router.post('/rules', authenticateToken, checkPermission('manage_communication'), commController.createRule);
 router.delete('/rules/:id', authenticateToken, checkPermission('manage_communication'), commController.deleteRule);
 
-// Campaigns Management
 router.get('/campaigns', authenticateToken, checkPermission('manage_communication'), commController.getCampaigns);
 router.post('/campaigns/execute', authenticateToken, checkPermission('manage_communication'), commController.executeCampaign);
 

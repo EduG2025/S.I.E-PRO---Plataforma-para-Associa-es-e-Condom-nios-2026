@@ -1,4 +1,6 @@
+
 import pool from '../config/database.js';
+import crypto from 'crypto';
 
 /**
  * SRE UTILS: Auxiliares de processamento
@@ -26,7 +28,7 @@ export const getDashboard = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const [noticesRes, reservationsRes, balanceRes, surveysRes] = await Promise.all([
+        const [noticesRes, reservationsRes, balanceRes, surveysRes, invitesRes] = await Promise.all([
             pool.query('SELECT id, title, content, created_at FROM notices ORDER BY created_at DESC LIMIT 5'),
             pool.query('SELECT * FROM reservations WHERE user_id = ? AND date >= CURDATE() ORDER BY date ASC', [userId]),
             pool.query('SELECT SUM(amount) as total FROM financials WHERE user_id = ? AND status="PENDING"', [userId]),
@@ -35,7 +37,8 @@ export const getDashboard = async (req, res) => {
                 WHERE status = 'ACTIVE' 
                 AND id NOT IN (SELECT survey_id FROM survey_responses WHERE user_id = ?)
                 LIMIT 3
-            `, [userId])
+            `, [userId]),
+            pool.query('SELECT COUNT(*) as count FROM invitations WHERE user_id = ? AND visit_date >= CURDATE()', [userId])
         ]);
 
         const activeSurveys = surveysRes[0].map(survey => {
@@ -54,6 +57,7 @@ export const getDashboard = async (req, res) => {
             myReservations: reservationsRes[0],
             pendingBalance: parseFloat(balanceRes[0][0]?.total || 0).toFixed(2),
             activeSurveys: activeSurveys,
+            activeInvitesCount: invitesRes[0][0].count,
             server_status: { online: true, timestamp: new Date() }
         });
     } catch (e) {
@@ -112,6 +116,55 @@ export const updateOwnProfile = async (req, res) => {
     } catch (e) {
         console.error("[SRE PROFILE_UPDATE FAIL]", e);
         res.status(500).json({ error: "Falha ao atualizar perfil." });
+    }
+};
+
+/**
+ * 7. SMART GUEST SYSTEM (NEW)
+ */
+export const getMyInvitations = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const [rows] = await pool.query(
+            "SELECT * FROM invitations WHERE user_id = ? ORDER BY visit_date DESC",
+            [userId]
+        );
+        res.json({ data: rows });
+    } catch (e) {
+        res.status(500).json({ error: "Erro ao carregar convites." });
+    }
+};
+
+export const createInvitation = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { guest_name, guest_document, visit_date } = req.body;
+        
+        // Gera um hash único para o QR Code
+        const qrHash = crypto.randomBytes(16).toString('hex');
+
+        const [result] = await pool.query(
+            "INSERT INTO invitations (user_id, guest_name, guest_document, visit_date, qr_code_hash) VALUES (?, ?, ?, ?, ?)",
+            [userId, guest_name.toUpperCase(), guest_document, visit_date, qrHash]
+        );
+
+        res.json({ 
+            success: true, 
+            invitationId: result.insertId, 
+            qr_code: qrHash 
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Falha ao protocolar convite." });
+    }
+};
+
+export const cancelInvitation = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        await pool.query("DELETE FROM invitations WHERE id = ? AND user_id = ?", [req.params.id, userId]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: "Falha ao cancelar convite." });
     }
 };
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { OfficialDocument, SystemInfo, User, DocumentVersion, DocStatus, DualDesignSystem } from '../types';
 import { documentService, aiService, api, visualTemplateService, storageService } from '../services/api';
@@ -13,7 +14,8 @@ import {
     LayoutTemplate, Eye, RefreshCw, Copy, Maximize, Minimize,
     Layout, MoveUp, MoveDown, Code, Smartphone, Monitor, Settings,
     Building2, Layers, Type, Building,
-    List, ListOrdered, Indent, Outdent, Highlighter, Baseline, Subscript, Superscript
+    List, ListOrdered, Indent, Outdent, Highlighter, Baseline, Subscript, Superscript,
+    PenTool, BookOpen, Quote
 } from 'lucide-react';
 
 // --- Interfaces ---
@@ -98,6 +100,144 @@ const STATUS_LABELS: Record<DocStatus, { label: string; color: string }> = {
 };
 
 // --- Sub-components ---
+
+const GhostwriterModal = memo(({ isOpen, onClose, onInsert, systemInfo }: any) => {
+    const [prompt, setPrompt] = useState('');
+    const [type, setType] = useState('OFÍCIO');
+    const [tone, setTone] = useState('FORMAL');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [result, setResult] = useState('');
+
+    const handleGenerate = async () => {
+        if (!prompt.trim()) return;
+        setIsGenerating(true);
+        try {
+            const systemPrompt = `Você é o Ghostwriter Administrativo Senior do sistema S.I.E PRO. 
+            OBJETIVO: Redigir um(a) ${type} com tom ${tone}.
+            ENTIDADE: ${systemInfo.name}. SIGLA: ${systemInfo.shortName}. PRESIDENTE: ${systemInfo.president_name}.
+            
+            DIRETRIZES:
+            1. Estruture o documento com cabeçalho interno (se necessário), local e data, vocativo, corpo do texto e fecho.
+            2. Use HTML semântico (<p>, <strong>, <ul>).
+            3. Não inclua estilos CSS em linha complexos, apenas estrutura limpa.
+            4. Responda APENAS com o código HTML do documento.`;
+
+            const res = await api.post('/ai/generate-document', { prompt: `${systemPrompt}\n\nINSTRUÇÃO DO USUÁRIO: ${prompt}` });
+            setResult(res.data.text);
+        } catch (e) {
+            alert("Erro na geração neural.");
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[10010] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden border border-white/10 animate-scale-in">
+                <div className="h-20 px-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-fuchsia-600 rounded-xl shadow-lg animate-pulse">
+                            <PenTool size={20} className="text-white" />
+                        </div>
+                        <div>
+                            <h3 className="font-black text-xl uppercase tracking-tighter leading-none">Ghostwriter Neural</h3>
+                            <p className="text-fuchsia-400 text-[9px] font-black uppercase tracking-widest mt-1">SRE Editorial Assistant V7.0</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-3 hover:bg-rose-500 rounded-xl transition-all border border-white/5"><X size={24} /></button>
+                </div>
+
+                <div className="flex-1 flex overflow-hidden">
+                    {/* Painel de Configuração */}
+                    <div className="w-80 border-r border-slate-200 p-8 flex flex-col gap-8 bg-slate-50/50">
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Tipo de Documento</label>
+                            <div className="grid grid-cols-1 gap-2">
+                                {['OFÍCIO', 'ATA', 'EDITAL', 'CIRCULAR', 'NOTIFICAÇÃO'].map(t => (
+                                    <button key={t} onClick={() => setType(t)} className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase text-left transition-all border ${type === t ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`}>
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Tom de Voz</label>
+                            <div className="grid grid-cols-1 gap-2">
+                                {['FORMAL', 'JURÍDICO', 'AMIGÁVEL', 'URGENTE'].map(t => (
+                                    <button key={t} onClick={() => setTone(t)} className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase text-left transition-all border ${tone === t ? 'bg-fuchsia-600 border-fuchsia-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-fuchsia-300'}`}>
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="mt-auto p-5 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                            <p className="text-[9px] font-bold text-indigo-900 uppercase leading-relaxed">
+                                <Sparkles size={12} className="inline mr-2" />
+                                O Ghostwriter utiliza os dados mestres do Kernel para preencher campos automáticos.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Área de Redação */}
+                    <div className="flex-1 flex flex-col bg-white overflow-hidden">
+                        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-[11px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                    <Wand2 size={16} className="text-indigo-600" /> O que você deseja escrever?
+                                </label>
+                                <textarea 
+                                    className="w-full h-40 p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-inner placeholder:text-slate-300"
+                                    placeholder="Ex: Escreva um comunicado urgente sobre a manutenção da caixa d'água central amanhã das 08h às 14h..."
+                                    value={prompt}
+                                    onChange={e => setPrompt(e.target.value)}
+                                />
+                            </div>
+
+                            {result && (
+                                <div className="space-y-4 animate-fade-in">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Resultado Gerado</label>
+                                        <button onClick={() => setResult('')} className="text-[9px] font-black text-rose-500 uppercase">Limpar</button>
+                                    </div>
+                                    <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-dashed border-indigo-200 font-serif text-sm prose max-w-none" dangerouslySetInnerHTML={{ __html: result }} />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-8 border-t bg-slate-50 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">IA Conectada • Cluster Alpha</span>
+                            </div>
+                            <div className="flex gap-4">
+                                {result ? (
+                                    <button 
+                                        onClick={() => { onInsert(result); onClose(); }}
+                                        className="px-12 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-500 transition-all flex items-center gap-2"
+                                    >
+                                        <CheckCircle2 size={16} /> Inserir no Editor
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={handleGenerate}
+                                        disabled={isGenerating || !prompt.trim()}
+                                        className="px-12 py-4 bg-slate-950 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-600 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-50"
+                                    >
+                                        {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />} Gerar Rascunho
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+});
 
 const VisualTemplateManager = memo(({ isOpen, onClose, systemInfo, onTemplateUpdate }: any) => {
     const [templates, setTemplates] = useState<VisualTemplate[]>([]);
@@ -974,6 +1114,7 @@ const DocumentHub = ({ systemInfo, currentUser, sidebarCollapsed }: DocumentHubP
     const [isPageConfigOpen, setIsPageConfigOpen] = useState(false);
     const [isWatermarkModalOpen, setIsWatermarkModalOpen] = useState(false);
     const [isCustomAIModalOpen, setIsCustomAIModalOpen] = useState(false);
+    const [isGhostwriterModalOpen, setIsGhostwriterModalOpen] = useState(false);
     const [isActionManagerOpen, setIsActionManagerOpen] = useState(false);
     const [isVariablePickerOpen, setIsVariablePickerOpen] = useState(false);
     const [isTemplateBuilderOpen, setIsTemplateBuilderOpen] = useState(false);
@@ -1782,6 +1923,7 @@ const DocumentHub = ({ systemInfo, currentUser, sidebarCollapsed }: DocumentHubP
                         <PageConfigModal isOpen={isPageConfigOpen} onClose={() => setIsPageConfigOpen(false)} pageConfig={pageConfig} setPageConfig={setPageConfig} />
                         <ActionManagerModal isOpen={isActionManagerOpen} onClose={() => setIsActionManagerOpen(false)} quickActions={quickActions} editingAction={editingAction} setEditingAction={setEditingAction} onSave={handleSaveAction} onDelete={handleDeleteAction} isSaving={isSaving} />
                         <CustomAIModal isOpen={isCustomAIModalOpen} onClose={() => setIsCustomAIModalOpen(false)} tone={aiTone} setTone={setAiTone} command={customAICommand} setCommand={setCustomAICommand} onExecute={handleAIRefactor} isGenerating={isGenerating} />
+                        <GhostwriterModal isOpen={isGhostwriterModalOpen} onClose={() => setIsGhostwriterModalOpen(false)} onInsert={insertHtmlAtCaret} systemInfo={systemInfo} />
                         
                         {/* Editor Toolbar Header */}
                         <div className="h-20 px-10 bg-slate-900 text-white flex justify-between items-center shrink-0 shadow-2xl relative z-[100] border-b border-white/5">
@@ -1834,11 +1976,6 @@ const DocumentHub = ({ systemInfo, currentUser, sidebarCollapsed }: DocumentHubP
 
                                      <div className="h-6 w-px bg-slate-200 mx-1" />
 
-                                     <button onMouseDown={e => { e.preventDefault(); handleFormat('subscript'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><Subscript size={18} /></button>
-                                     <button onMouseDown={e => { e.preventDefault(); handleFormat('superscript'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><Superscript size={18} /></button>
-
-                                     <div className="h-6 w-px bg-slate-200 mx-1" />
-
                                      <button onMouseDown={e => { e.preventDefault(); handleFormat('justifyLeft'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><AlignLeft size={18} /></button>
                                      <button onMouseDown={e => { e.preventDefault(); handleFormat('justifyCenter'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><AlignCenter size={18} /></button>
                                      <button onMouseDown={e => { e.preventDefault(); handleFormat('justifyRight'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><AlignRight size={18} /></button>
@@ -1848,19 +1985,13 @@ const DocumentHub = ({ systemInfo, currentUser, sidebarCollapsed }: DocumentHubP
 
                                      <button onMouseDown={e => { e.preventDefault(); handleFormat('insertUnorderedList'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><List size={18} /></button>
                                      <button onMouseDown={e => { e.preventDefault(); handleFormat('insertOrderedList'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><ListOrdered size={18} /></button>
-                                     <button onMouseDown={e => { e.preventDefault(); handleFormat('indent'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><Indent size={18} /></button>
-                                     <button onMouseDown={e => { e.preventDefault(); handleFormat('outdent'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><Outdent size={18} /></button>
-
+                                     
                                      <div className="h-6 w-px bg-slate-200 mx-1" />
 
                                      <div className="flex items-center gap-1 bg-slate-50 rounded-lg p-1 border border-slate-200">
                                          <label className="cursor-pointer p-1 hover:bg-white rounded" title="Cor do Texto">
                                              <Baseline size={16} className="text-slate-600"/>
                                              <input type="color" className="hidden" onChange={e => handleFormat('foreColor', e.target.value)} />
-                                         </label>
-                                         <label className="cursor-pointer p-1 hover:bg-white rounded" title="Cor de Fundo">
-                                             <Highlighter size={16} className="text-slate-600"/>
-                                             <input type="color" className="hidden" onChange={e => handleFormat('hiliteColor', e.target.value)} />
                                          </label>
                                      </div>
                                 </div>
@@ -1881,7 +2012,6 @@ const DocumentHub = ({ systemInfo, currentUser, sidebarCollapsed }: DocumentHubP
                                         <>
                                             <button onMouseDown={e => { e.preventDefault(); handleInsertTable(); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title="Inserir Tabela"><TableIcon size={18} /></button>
                                             <button onMouseDown={e => { e.preventDefault(); document.getElementById('editor-image-upload')?.click(); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title="Inserir Imagem"><ImageIcon size={18} /></button>
-                                            <button onMouseDown={e => { e.preventDefault(); handleFormat('removeFormat'); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title="Limpar Formatação"><Eraser size={18} /></button>
                                             
                                             <div className="h-6 w-px bg-slate-200 mx-1" />
 
@@ -1899,9 +2029,11 @@ const DocumentHub = ({ systemInfo, currentUser, sidebarCollapsed }: DocumentHubP
                                                     </div>
                                                 )}
                                             </div>
-                                            <button onClick={() => setIsCustomAIModalOpen(true)} className="p-2.5 px-4 bg-fuchsia-50 text-fuchsia-600 rounded-xl hover:bg-fuchsia-600 hover:text-white transition-all font-black text-[10px] uppercase flex items-center gap-2">
-                                                <Sparkles size={14} /> IA
+                                            
+                                            <button onClick={() => setIsGhostwriterModalOpen(true)} className="p-2.5 px-4 bg-fuchsia-100 text-fuchsia-700 rounded-xl hover:bg-fuchsia-600 hover:text-white transition-all font-black text-[10px] uppercase flex items-center gap-2 shadow-sm border border-fuchsia-200">
+                                                <PenTool size={14} /> Ghostwriter
                                             </button>
+
                                             <button onClick={handleInsertPresidentDossier} className="p-2.5 px-4 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all font-black text-[10px] uppercase flex items-center gap-2">
                                                 <UserCog size={14} /> Assinatura
                                             </button>

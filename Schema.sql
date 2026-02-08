@@ -1,3 +1,4 @@
+
 -- ---------------------------------------------------------
 -- S.I.E PRO - MASTER DATABASE SCHEMA V252.0
 -- PROTOCOLO SRE: SOBERANIA DE DADOS & RESILIÊNCIA
@@ -90,6 +91,17 @@ CREATE TABLE IF NOT EXISTS `users` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_users_cpf` (`cpf_cnpj`),
   INDEX `idx_users_unit` (`unit`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.1 TEMPLATES DE IDENTIDADE (NOVO)
+CREATE TABLE IF NOT EXISTS `id_card_templates` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL,
+  `layout_front` JSON,
+  `layout_back` JSON,
+  `is_active` TINYINT(1) DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. INTELIGÊNCIA ARTIFICIAL (NEURAL CORE)

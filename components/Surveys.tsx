@@ -1,63 +1,28 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Survey, SurveyQuestion, SystemInfo } from '../types';
-import { surveyService, communicationService, storageService, api } from '../services/api';
+import { surveyService, communicationService, api } from '../services/api';
 import {
-    Plus, X, Trash2, Edit2, Loader2, Save, Share2, Link, Eye, Brain, Database,
-    Sparkles, ClipboardCheck, GraduationCap, HandHelping, ChevronRight, AlertCircle,
-    Info, Search, Layout, Settings, ListPlus, GitBranch, Table, Activity, Zap,
-    Gauge, Target, Users, Wand2, BarChart3, ShieldCheck, Thermometer, Fingerprint,
-    Briefcase, Scale, Landmark, HardHat, HeartPulse, GraduationCap as School, Users2,
-    ShieldAlert, TrendingUp, Lightbulb, GitMerge, ListTree, ArrowDownRight,
-    MapPin, Bus, Leaf, ShoppingBag, Siren, Coins, LayoutDashboard, PieChart,
-    ChevronUp, ChevronDown, Video, Image as ImageIcon, Music, Smartphone, Workflow,
-    Upload, FileVideo, FileAudio, CheckCircle2, Timer, BrainCircuit, Hash, Layers, MessageCircle, Send,
-    Plane, Heart, Gamepad, Stethoscope, Clock, Printer, RefreshCw,
-    HelpCircle, LayoutGrid, Bot,
-    Tag
+    Plus, X, Trash2, Edit2, Loader2, Save, Link, BarChart3,
+    CheckCircle2, ClipboardCheck, RefreshCw, Tag
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 /**
  * 🧠 DOUTRINA TÉCNICA: SISTEMA DE ARQUITETURA MULTISSETORIAL UNIFICADO
- * Versão: 19.3.0 - SRE PATCH (Category Fix)
+ * Versão: 19.3.0 - SRE PATCH (Implicit Any Fix)
  */
-
-const PILLAR_CONFIG: Record<string, { label: string, icon: any, color: string, bg: string }> = {
-    '1': { label: 'Demografia', icon: Users2, color: 'text-blue-500', bg: 'bg-blue-50' },
-    '2': { label: 'Saúde', icon: HeartPulse, color: 'text-rose-500', bg: 'bg-rose-50' },
-    '3': { label: 'Assistência', icon: HelpCircle, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    '4': { label: 'Educação', icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
-    '5': { label: 'Esporte/Lazer', icon: Activity, color: 'text-orange-500', bg: 'bg-orange-50' },
-    '6': { label: 'Personalizado', icon: LayoutGrid, color: 'text-slate-500', bg: 'bg-slate-50' },
-};
 
 const SYSTEM_TEXTS = {
     TITLE_MAIN: "Censo & Inteligência 360º",
     SUBTITLE_MAIN: "Neural Architecture • Protocolo SRE V19.3",
     TITLE_MODAL: "Arquiteto Neural",
-    SUBTITLE_MODAL: "Configuração Tática e Auditoria Heurística",
-    BTN_INJECT_MASTER: "Injetar Censo 360º",
     BTN_NEW_PROTOCOL: "Novo Protocolo",
-    BTN_NEURAL_ARCHITECT: "Neural Architect",
     BTN_COMMIT_PROTOCOL: "Sincronizar Protocolo",
     BTN_ADD_ATTRIBUTE: "Adicionar Atributo",
-    BTN_ADD_MEDIA_CARD: "Adicionar Card Multimídia",
-    PLACEHOLDER_SEARCH: "Filtrar protocolos setoriais...",
-    LBL_RECORDS_MAPPED: "Protocolos Ativos",
-    LBL_ATTRIBUTES: "Atributos",
-    CONFIRM_DELETE: "Remover protocolo permanentemente?",
     LBL_NO_TITLE: "Sem Título",
-    IA_SECTION_TITLE: "Orquestrador Neural",
-    LBL_MEDIA_URL: "URL da Mídia / Caminho SRE",
-    LBL_CONTENT_HTML: "Conteúdo Rico (HTML/Texto)",
-    LBL_LOGIC_PARENT: "Mostrar apenas se a pergunta...",
-    LBL_LOGIC_TRIGGER: "...tiver o valor:",
-    LBL_LOGIC_NONE: "Sempre visível (Linear)",
-    TITLE_WHATSAPP_MODAL: "Disparo de Convites WhatsApp",
-    SUBTITLE_WHATSAPP_MODAL: "Gateway JennyAI • Comunicação Massiva",
-    METRIC_LOW: "Baixa (Otimizado)",
-    METRIC_MED: "Média (Atenção)",
-    METRIC_HIGH: "Alta (Crítico)"
+    RESP_SIM: "SIM",
+    RESP_NAO: "NÃO",
+    RESP_PLACEHOLDER: "Digite aqui...",
 };
 
 const CATEGORIES = [
@@ -80,34 +45,18 @@ const CATEGORIES = [
 
 const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
     const [surveys, setSurveys] = useState<Survey[]>([]);
-    const [templates, setTemplates] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingSurvey, setEditingSurvey] = useState<any>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [activeTab, setActiveTab] = useState<'STRUCTURE' | 'WORKFLOW'>('STRUCTURE');
     const [activeView, setActiveView] = useState<'LIST' | 'RESULTS'>('LIST');
     const [selectedSurveyResults, setSelectedSurveyResults] = useState<any>(null);
 
-    const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
-    const [isWAPanelOpen, setIsWAPanelOpen] = useState(false);
-    const [isAILoading, setIsAILoading] = useState(false);
-    const [isSendingWA, setIsSendingWA] = useState(false);
-    const [waTargetRole, setWaTargetRole] = useState('RESIDENT');
-    const [aiAudit, setAiAudit] = useState<any>(null);
-    const [depth, setDepth] = useState<1 | 2 | 3>(1);
-    const [maxQuestions, setMaxQuestions] = useState(10);
-    const [parentSurveyId, setParentSurveyId] = useState<string>('');
-    const [excludedPillars, setExcludedPillars] = useState<string[]>([]);
-    const [customPillarName, setCustomPillarName] = useState<string>('Infraestrutura');
-
     useEffect(() => {
         loadSurveys();
-        loadTemplates();
     }, []);
 
-    const safeQuestions = useMemo(() => {
+    const safeQuestions = useMemo((): SurveyQuestion[] => {
         if (!editingSurvey) return [];
         if (Array.isArray(editingSurvey.questions)) return editingSurvey.questions;
         try {
@@ -123,13 +72,6 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
             setSurveys(Array.isArray(res.data?.data) ? res.data.data : []);
         } catch (err) { setSurveys([]); } 
         finally { setIsLoading(false); }
-    };
-
-    const loadTemplates = async () => {
-        try {
-            const res = await communicationService.getTemplates();
-            setTemplates(Array.isArray(res.data?.data) ? res.data.data : []);
-        } catch (e) { }
     };
 
     const loadResults = async (survey: Survey) => {
@@ -160,27 +102,10 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
         finally { setIsSaving(false); }
     };
 
-    const handleNeuralArchitect = async () => {
-        if (!editingSurvey.title) return alert("Defina um título.");
-        setIsAILoading(true);
-        try {
-            const res = await surveyService.suggestQuestions({
-                title: editingSurvey.title,
-                description: editingSurvey.description,
-                depth, maxQuestions
-            });
-            const newQs = (res.data.data.questions || []).map((q: any) => ({
-                 ...q, id: `ai_${Math.random().toString(36).substr(2, 9)}`, mapping_tag: q.mapping_tag || 'GERAL'
-            }));
-            setEditingSurvey({ ...editingSurvey, questions: [...safeQuestions, ...newQs] });
-        } catch (e) { alert("Erro na arquitetura neural."); }
-        finally { setIsAILoading(false); }
-    };
-
-    const updateQuestion = (index: number, field: string, value: any) => {
+    const updateQuestion = (index: number, field: keyof SurveyQuestion, value: any) => {
         const qs = [...safeQuestions];
         if (qs[index]) {
-            qs[index] = { ...qs[index], [field]: value };
+            qs[index] = { ...qs[index], [field]: value } as SurveyQuestion;
             setEditingSurvey({ ...editingSurvey, questions: qs });
         }
     };
@@ -199,7 +124,6 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                         </div>
                     </div>
                 </header>
-                {/* Simplified Results View */}
                 <div className="flex-1 bg-white rounded-[3rem] p-10 flex items-center justify-center">
                     <p className="text-slate-400 font-bold uppercase tracking-widest">Visualização de BI disponível no Dashboard Demográfico.</p>
                 </div>
@@ -234,7 +158,7 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                                     <p className="text-[10px] font-bold text-slate-400 uppercase">{Array.isArray(s.questions) ? s.questions.length : 0} Perguntas</p>
                                 </div>
                                 <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
-                                    <button onClick={() => { setEditingSurvey(s); setActiveTab('STRUCTURE'); setIsModalOpen(true); }} className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"><Edit2 size={20} /></button>
+                                    <button onClick={() => { setEditingSurvey(s); setIsModalOpen(true); }} className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"><Edit2 size={20} /></button>
                                     <button onClick={() => loadResults(s)} className="p-3 text-slate-400 hover:text-emerald-600 transition-colors"><BarChart3 size={20} /></button>
                                     <button onClick={() => { const url = `${window.location.origin}/census/${s.id}`; navigator.clipboard.writeText(url); alert("Link copiado!"); }} className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"><Link size={20} /></button>
                                 </div>
@@ -253,7 +177,7 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                                 <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-indigo-600 text-white rounded-xl font-black text-[11px] uppercase transition-all flex items-center gap-3">
                                     {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {SYSTEM_TEXTS.BTN_COMMIT_PROTOCOL}
                                 </button>
-                                <button onClick={() => setIsModalOpen(false)} className="p-3.5 hover:bg-rose-500 rounded-xl transition-all border border-white/5"><X size={24} /></button>
+                                <button onClick={() => setIsModalOpen(false)} className="p-3.5 hover:bg-rose-50 rounded-xl transition-all border border-white/5"><X size={24} /></button>
                             </div>
                         </div>
 
@@ -261,20 +185,34 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                             <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                                 <div className="max-w-4xl mx-auto space-y-12">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <input className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-sm font-black uppercase" value={editingSurvey.title} onChange={e => setEditingSurvey({ ...editingSurvey, title: e.target.value })} placeholder="Título da Pesquisa" />
+                                        <input 
+                                            className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-sm font-black uppercase" 
+                                            value={editingSurvey.title} 
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingSurvey({ ...editingSurvey, title: e.target.value })} 
+                                            placeholder="Título da Pesquisa" 
+                                        />
                                     </div>
                                     <div className="space-y-8">
                                         {safeQuestions.map((q: any, idx: number) => (
                                             <div key={q.id || idx} className="p-10 border border-slate-200 rounded-[3rem] shadow-sm space-y-6 bg-white hover:border-indigo-300 transition-all">
                                                 <div className="flex gap-4">
                                                     <span className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black">{idx + 1}</span>
-                                                    <input className="flex-1 font-black text-lg text-slate-800 uppercase outline-none bg-transparent" value={q.text} onChange={e => updateQuestion(idx, 'text', e.target.value)} placeholder="Pergunta..." />
+                                                    <input 
+                                                        className="flex-1 font-black text-lg text-slate-800 uppercase outline-none bg-transparent" 
+                                                        value={q.text} 
+                                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateQuestion(idx, 'text', e.target.value)} 
+                                                        placeholder="Pergunta..." 
+                                                    />
                                                     <button onClick={() => { const qs = [...safeQuestions]; qs.splice(idx, 1); setEditingSurvey({ ...editingSurvey, questions: qs }); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={20}/></button>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                                     <div className="space-y-1">
                                                         <label className="text-[8px] font-black text-slate-400 uppercase">Tipo</label>
-                                                        <select className="w-full h-11 bg-slate-50 border border-slate-200 rounded-lg px-4 text-[9px] font-black uppercase outline-none" value={q.type} onChange={e => updateQuestion(idx, 'type', e.target.value)}>
+                                                        <select 
+                                                            className="w-full h-11 bg-slate-50 border border-slate-200 rounded-lg px-4 text-[9px] font-black uppercase outline-none" 
+                                                            value={q.type} 
+                                                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateQuestion(idx, 'type', e.target.value)}
+                                                        >
                                                             <option value="text">TEXTO LIVRE</option>
                                                             <option value="select">SELEÇÃO ÚNICA</option>
                                                             <option value="boolean">SIM / NÃO</option>
@@ -283,7 +221,11 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                                                     </div>
                                                     <div className="space-y-1">
                                                         <label className="text-[8px] font-black text-slate-400 uppercase flex items-center gap-1"><Tag size={10}/> Categoria KPI 360</label>
-                                                        <select className="w-full h-11 bg-slate-50 border border-slate-200 rounded-lg px-4 text-[9px] font-black uppercase outline-none" value={q.mapping_tag || 'GERAL'} onChange={e => updateQuestion(idx, 'mapping_tag', e.target.value)}>
+                                                        <select 
+                                                            className="w-full h-11 bg-slate-50 border border-slate-200 rounded-lg px-4 text-[9px] font-black uppercase outline-none" 
+                                                            value={q.mapping_tag || 'GERAL'} 
+                                                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateQuestion(idx, 'mapping_tag', e.target.value)}
+                                                        >
                                                             {CATEGORIES.map(cat => <option key={cat.v} value={cat.v}>{cat.l}</option>)}
                                                         </select>
                                                     </div>
@@ -291,7 +233,12 @@ const Surveys = ({ systemInfo }: { systemInfo: SystemInfo }) => {
                                                 {q.type === 'select' && (
                                                     <div className="space-y-2">
                                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Opções (Separadas por vírgula)</label>
-                                                        <input className="w-full font-bold h-12 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-xs uppercase outline-none" placeholder="Opção 1, Opção 2..." value={Array.isArray(q.options) ? q.options.join(', ') : q.options} onChange={e => updateQuestion(idx, 'options', e.target.value.split(',').map((opt: string) => opt.trim()))} />
+                                                        <input 
+                                                            className="w-full font-bold h-12 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-xs uppercase outline-none" 
+                                                            placeholder="Opção 1, Opção 2..." 
+                                                            value={Array.isArray(q.options) ? q.options.join(', ') : q.options} 
+                                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateQuestion(idx, 'options', e.target.value.split(',').map((opt: string) => opt.trim()))} 
+                                                        />
                                                     </div>
                                                 )}
                                             </div>

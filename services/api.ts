@@ -27,6 +27,13 @@ export const authService = {
     me: () => api.get('/auth/me'),
 };
 
+export const walletService = {
+    getInvitations: () => api.get('/resident/invitations'),
+    createInvitation: (data: any) => api.post('/resident/invitations', data),
+    cancelInvitation: (id: number) => api.delete(`/resident/invitations/${id}`),
+    validateAccess: (hash: string) => api.get(`/visitors/validate/${hash}`),
+};
+
 export const planService = {
     getAll: () => api.get('/plans'),
     getOne: (id: any) => api.get(`/plans/${id}`),
@@ -102,11 +109,27 @@ export const aiService = {
     deletePrompt: (id: any) => api.delete(`/ai/prompts/${id}`),
 };
 
+export const collectiveService = {
+    getDecisions: () => api.get('/collective/decisions'),
+    createDecision: (data: any) => api.post('/collective/decisions', data),
+    castVote: (id: number, choice: 'YES' | 'NO' | 'ABSTAIN') => api.post(`/collective/decisions/${id}/vote`, { choice }),
+    getResults: (id: number) => api.get(`/collective/decisions/${id}/results`),
+    deleteDecision: (id: number) => api.delete(`/collective/decisions/${id}`),
+};
+
 export const visualTemplateService = {
     getAll: () => api.get('/governance/visual-templates'),
     create: (data: any) => api.post('/governance/visual-templates', data),
     update: (id: any, data: any) => api.put(`/governance/visual-templates/${id}`, data),
     delete: (id: any) => api.delete(`/governance/visual-templates/${id}`),
+};
+
+// NOVO: Serviço de Templates de ID
+export const idTemplateService = {
+    getAll: () => api.get('/governance/id-templates'),
+    save: (data: any) => api.post('/governance/id-templates', data),
+    delete: (id: any) => api.delete(`/governance/id-templates/${id}`),
+    activate: (id: any) => api.post(`/governance/id-templates/${id}/activate`),
 };
 
 export const mapService = {

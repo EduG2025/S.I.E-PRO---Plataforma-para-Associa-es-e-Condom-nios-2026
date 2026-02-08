@@ -3,7 +3,7 @@ import { User, SystemInfo } from '../types';
 import { userService, systemService } from '../services/api';
 import {
     Search, Edit2, Plus, Loader2, Users, Shield, Heart, User as UserIcon,
-    Fingerprint, Trash2, Zap, ChevronRight, ChevronLeft, CheckCircle2, X
+    Fingerprint, Trash2, Zap, ChevronRight, ChevronLeft, CheckCircle2, X, Filter
 } from 'lucide-react';
 import UserModal from './UserModal';
 
@@ -45,127 +45,159 @@ const UserManagement = ({ systemInfo }: UserManagementProps) => {
 
     const primaryColor = systemInfo.primaryColor || '#4f46e5';
 
-    return (
-        <div className="flex-1 flex flex-col min-h-0 space-y-4 md:space-y-6 animate-fade-in h-full relative">
+    // Skeleton Row for Loading State
+    const SkeletonRow = () => (
+        <tr className="animate-pulse">
+            <td className="p-4 md:p-6"><div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-200 rounded-xl"></div><div className="space-y-2"><div className="w-32 h-3 bg-slate-200 rounded"></div><div className="w-20 h-2 bg-slate-200 rounded"></div></div></div></td>
+            <td className="hidden md:table-cell p-6"><div className="w-24 h-3 bg-slate-200 rounded"></div></td>
+            <td className="hidden lg:table-cell p-6 text-center"><div className="w-20 h-6 bg-slate-200 rounded-lg mx-auto"></div></td>
+            <td className="p-6 text-center"><div className="w-16 h-6 bg-slate-200 rounded-lg mx-auto"></div></td>
+            <td className="p-6 text-right"><div className="w-8 h-8 bg-slate-200 rounded-lg ml-auto"></div></td>
+        </tr>
+    );
 
-            {/* SRE: Header Compacto (Redução de 40% em mobile) */}
-            <div className="flex flex-row justify-between items-center bg-slate-900 px-5 py-4 md:p-8 rounded-2xl md:rounded-[2.5rem] text-white shadow-xl shrink-0 overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                <div className="flex items-center gap-3 md:gap-5 relative z-10">
-                    <div className="p-2.5 md:p-4 bg-indigo-600 rounded-xl md:rounded-2xl shadow-lg shrink-0">
-                        <Fingerprint size={20} className="md:w-6 md:h-6" />
+    return (
+        <div className="flex-1 flex flex-col min-h-0 space-y-6 animate-fade-in h-full relative">
+
+            {/* SRE: Header Compacto com Efeito Glass */}
+            <div className="flex flex-row justify-between items-center bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-xl shrink-0 overflow-hidden relative border border-white/5">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+                <div className="flex items-center gap-6 relative z-10">
+                    <div className="p-4 bg-indigo-600 rounded-2xl shadow-xl" style={{ backgroundColor: primaryColor }}>
+                        <Fingerprint size={28} />
                     </div>
-                    <div className="min-w-0">
-                        <h2 className="text-sm md:text-2xl font-black tracking-tight uppercase leading-none truncate">Membros & Identidades</h2>
-                        <p className="hidden md:block text-indigo-400 text-[10px] font-black uppercase tracking-widest mt-2 opacity-80">Base Cadastral • {systemInfo.shortName}</p>
+                    <div>
+                        <h2 className="text-3xl font-black tracking-tightest uppercase leading-none">Identidade & Acesso</h2>
+                        <p className="text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2 opacity-80 flex items-center gap-2">
+                            <Shield size={12}/> Ledger de Membros V5.0
+                        </p>
                     </div>
                 </div>
                 <div className="relative z-10">
                     <button
-                        onClick={() => setEditingUser({ id: `temp_${Date.now()}`, name: '', role: 'MORADOR', status: 'ACTIVE', active: 1, cpf_cnpj: '', username: '', phone: '', email: '', unit: '', address: '', coordinates: { lat: -23.5505, lng: -46.6333 } } as any)}
-                        className="px-4 py-2.5 md:px-8 md:py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl md:rounded-2xl font-black text-[9px] md:text-[11px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-xl active:scale-95"
-                        style={{ backgroundColor: primaryColor }}
+                        onClick={() => setEditingUser({ id: `temp_${Date.now()}`, name: '', role: 'RESIDENT', status: 'ACTIVE', active: 1, cpf_cnpj: '', username: '', phone: '', email: '', unit: '', address: '', coordinates: { lat: -23.5505, lng: -46.6333 } } as any)}
+                        className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 transition-all shadow-xl hover:bg-indigo-50 active:scale-95"
                     >
-                        <Plus size={16} className="md:w-5 md:h-5" /> <span className="hidden sm:inline">Novo Registro</span><span className="sm:hidden">Novo</span>
+                        <Plus size={18} /> Novo Registro
                     </button>
                 </div>
             </div>
 
-            {/* CONTAINER DE LISTAGEM - ARREDONDAMENTO NORMALIZADO */}
-            <div className="bg-white rounded-[2rem] md:rounded-[3rem] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-0">
-                <div className="p-4 md:p-8 border-b bg-slate-50/30 shrink-0 flex flex-col md:flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full md:w-96">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+            {/* CONTAINER DE LISTAGEM - SOVEREIGN GRID */}
+            <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-0">
+                
+                {/* TOOLBAR */}
+                <div className="p-6 border-b border-slate-100 bg-white flex flex-col md:flex-row gap-6 justify-between items-center z-20">
+                    <div className="relative w-full md:w-96 group">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={18} />
                         <input
                             type="text"
-                            placeholder="PESQUISAR..."
+                            placeholder="FILTRAR IDENTIDADE..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-12 h-12 md:h-14 bg-white border border-slate-200 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold shadow-sm focus:border-indigo-500 transition-all uppercase outline-none"
+                            className="w-full pl-14 pr-4 h-14 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold shadow-inner focus:bg-white focus:border-indigo-500 outline-none transition-all uppercase placeholder:text-slate-400"
                         />
                     </div>
-                    <div className="flex gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
-                        {['ALL', 'ADMIN', 'MORADOR', 'DIRETORIA'].map(role => (
+                    
+                    {/* FILTROS EM ABAS (PILLS) */}
+                    <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto no-scrollbar max-w-full">
+                        {['ALL', 'ADMIN', 'RESIDENT', 'COUNCIL'].map(role => (
                             <button
                                 key={role}
                                 onClick={() => setFilterRole(role)}
-                                className={`px-4 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${filterRole === role ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-400 border-slate-100'}`}
-                                style={filterRole === role ? { backgroundColor: primaryColor, borderColor: primaryColor } : {}}
+                                className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${filterRole === role ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                                style={filterRole === role ? { color: primaryColor } : {}}
                             >
-                                {role === 'ALL' ? 'Todos' : role}
+                                {role === 'ALL' ? 'Todos' : role === 'RESIDENT' ? 'Moradores' : role === 'COUNCIL' ? 'Conselho' : 'Admin'}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                     <table className="w-full text-left border-separate border-spacing-0">
-                        <thead className="bg-slate-50 text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest border-b sticky top-0 z-10 backdrop-blur-md">
-                            <tr className="bg-white/95">
-                                <th className="p-4 md:p-8 border-b">Identidade</th>
-                                <th className="hidden md:table-cell p-8 border-b">Documento</th>
-                                <th className="hidden lg:table-cell p-8 border-b text-center">Perfil</th>
-                                <th className="p-4 md:p-8 border-b text-center">Estado</th>
-                                <th className="p-4 md:p-8 border-b text-right">Ações</th>
+                        <thead className="bg-white/90 backdrop-blur-md text-[9px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th className="p-6 border-b border-slate-100">Membro / Unidade</th>
+                                <th className="hidden md:table-cell p-6 border-b border-slate-100">Documento</th>
+                                <th className="hidden lg:table-cell p-6 border-b border-slate-100 text-center">Permissão</th>
+                                <th className="p-6 border-b border-slate-100 text-center">Estado</th>
+                                <th className="p-6 border-b border-slate-100 text-right">Ações</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-50">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-indigo-600" size={40} /></td></tr>
+                                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                             ) : filteredUsers.map(user => (
-                                <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
-                                    <td className="p-4 md:p-8">
-                                        <div className="flex items-center gap-3 md:gap-5">
-                                            <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-[1.25rem] overflow-hidden bg-slate-100 border-2 border-white shadow-md flex items-center justify-center shrink-0">
-                                                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <UserIcon size={20} className="text-slate-300 md:w-6 md:h-6" />}
+                                <tr key={user.id} className="hover:bg-indigo-50/30 transition-all group">
+                                    <td className="p-4 md:p-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-[1rem] overflow-hidden bg-slate-100 border border-slate-200 shadow-sm flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                                {user.avatar_url ? (
+                                                    <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" />
+                                                ) : (
+                                                    <span className="text-lg font-black text-slate-300">{user.name.charAt(0)}</span>
+                                                )}
                                             </div>
                                             <div className="min-w-0">
-                                                <p className="text-xs md:text-base font-black text-slate-800 uppercase truncate">{user.name}</p>
-                                                <p className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase mt-0.5 md:mt-1 truncate">Unid. {user.unit || '---'}</p>
+                                                <p className="text-sm font-black text-slate-800 uppercase truncate leading-none">{user.name}</p>
+                                                <div className="flex items-center gap-2 mt-1.5">
+                                                    <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase tracking-widest">
+                                                        Unid. {user.unit || '---'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="hidden md:table-cell p-8">
-                                        <p className="text-[11px] font-black text-slate-600 font-mono">{user.cpf_cnpj}</p>
+                                    <td className="hidden md:table-cell p-6">
+                                        <p className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg w-fit border border-slate-100">
+                                            {user.cpf_cnpj || '---'}
+                                        </p>
                                     </td>
-                                    <td className="hidden lg:table-cell p-8 text-center">
-                                        <span className="text-[9px] font-black uppercase text-indigo-600 px-3 py-1.5 bg-indigo-50 rounded-lg border border-indigo-100">
+                                    <td className="hidden lg:table-cell p-6 text-center">
+                                        <span className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border ${user.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
                                             {getRoleLabel(user.role as string)}
                                         </span>
                                     </td>
-                                    <td className="p-4 md:p-8 text-center">
-                                        <span className={`px-2.5 py-1 md:px-4 md:py-1.5 rounded-lg text-[7px] md:text-[9px] font-black uppercase border ${user.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
-                                            {user.status}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 md:p-8 text-right">
-                                        <div className="flex justify-end gap-1 md:gap-3">
-                                            <button onClick={() => setEditingUser(user)} className="p-2 md:p-3 text-slate-300 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm md:shadow-none">
-                                                <Edit2 size={16} className="md:w-5 md:h-5" />
-                                            </button>
+                                    <td className="p-6 text-center">
+                                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${user.status === 'ACTIVE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${user.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
+                                            <span className="text-[8px] font-black uppercase tracking-widest">{user.status === 'ACTIVE' ? 'Online' : 'Pendente'}</span>
                                         </div>
+                                    </td>
+                                    <td className="p-6 text-right">
+                                        <button 
+                                            onClick={() => setEditingUser(user)} 
+                                            className="p-3 text-slate-400 hover:text-white hover:bg-indigo-600 rounded-xl transition-all opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 shadow-sm"
+                                            title="Editar Dossiê"
+                                        >
+                                            <Edit2 size={16} />
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                     {!isLoading && filteredUsers.length === 0 && (
-                        <div className="py-32 text-center">
-                            <Users size={48} className="mx-auto text-slate-100 mb-4" />
-                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Nenhum registro localizado no cluster.</p>
+                        <div className="py-32 text-center flex flex-col items-center">
+                            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                                <Users size={32} className="text-slate-300" />
+                            </div>
+                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Nenhum Registro</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">O filtro atual não retornou resultados.</p>
                         </div>
                     )}
                 </div>
 
                 {/* PAGINAÇÃO SLIM */}
-                <div className="p-4 md:p-6 bg-slate-50/50 border-t flex justify-between items-center shrink-0">
-                    <span className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        Total: {pagination.total} Membros
+                <div className="p-4 bg-white border-t border-slate-100 flex justify-between items-center shrink-0 z-20">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">
+                        Total: {pagination.total} Identidades
                     </span>
                     <div className="flex gap-2">
-                        <button disabled={pagination.page <= 1} onClick={() => loadData(pagination.page - 1, search)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 disabled:opacity-30"><ChevronLeft size={16} /></button>
-                        <div className="flex items-center px-4 bg-white border border-slate-200 rounded-lg text-[9px] font-black text-slate-600">{pagination.page} / {pagination.pages}</div>
-                        <button disabled={pagination.page >= pagination.pages} onClick={() => loadData(pagination.page + 1, search)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 disabled:opacity-30"><ChevronRight size={16} /></button>
+                        <button disabled={pagination.page <= 1} onClick={() => loadData(pagination.page - 1, search)} className="w-10 h-10 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:bg-white hover:border-indigo-200 disabled:opacity-30 disabled:hover:bg-slate-50 transition-all"><ChevronLeft size={16} /></button>
+                        <div className="flex items-center px-6 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black text-slate-600">{pagination.page} / {pagination.pages}</div>
+                        <button disabled={pagination.page >= pagination.pages} onClick={() => loadData(pagination.page + 1, search)} className="w-10 h-10 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:bg-white hover:border-indigo-200 disabled:opacity-30 disabled:hover:bg-slate-50 transition-all"><ChevronRight size={16} /></button>
                     </div>
                 </div>
             </div>

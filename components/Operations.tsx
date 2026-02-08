@@ -15,19 +15,17 @@ interface OperationsProps {
 const Operations = ({ systemInfo }: OperationsProps) => {
     const [isLoading, setIsLoading] = useState(true);
     const [incidents, setIncidents] = useState([] as Incident[]);
-    const [templates, setTemplates] = useState<any[]>([]); // Templates de Msg
+    const [templates, setTemplates] = useState<any[]>([]); 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingIncident, setEditingIncident] = useState<any>(null);
     const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Map States
     const mapRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
     const circleRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
 
-    // Search State
     const [addressQuery, setAddressQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
 
@@ -56,6 +54,7 @@ const Operations = ({ systemInfo }: OperationsProps) => {
         mapRef.current = L.map(mapContainerRef.current, {
             center: [center.lat, center.lng],
             zoom: 15,
+            maxZoom: 20,
             zoomControl: false,
             attributionControl: false
         });
@@ -68,7 +67,7 @@ const Operations = ({ systemInfo }: OperationsProps) => {
             draggable: true,
             icon: L.divIcon({
                 className: 'tactical-marker',
-                html: `<div class="w-8 h-8 bg-rose-600 rounded-full border-4 border-white shadow-2xl flex items-center justify-center text-white"><Zap size={14} fill="white"/></div>`
+                html: `<div style="background-color: #f43f5e; width: 32px; height: 32px; border-radius: 50%; border: 4px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>`
             })
         }).addTo(mapRef.current);
 
@@ -186,28 +185,31 @@ const Operations = ({ systemInfo }: OperationsProps) => {
 
     const isAlertActive = editingIncident?.radius > 0 && (editingIncident?.priority?.includes('NÍVEL 3') || editingIncident?.priority?.includes('NÍVEL 4'));
 
+    const primaryColor = systemInfo.primaryColor || '#4f46e5';
+
     return (
-        <div className="flex-1 flex flex-col min-h-0 space-y-6 animate-fade-in h-full relative">
-             <div className="flex flex-row justify-between items-center bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-xl shrink-0 overflow-hidden relative">
+        <div className="flex-1 flex flex-col h-full animate-fade-in bg-slate-50 gap-6 p-[var(--sie-viewport-padding)]">
+            
+            <div className="flex flex-row justify-between items-center bg-slate-900 p-8 rounded-[var(--sie-radius)] text-white shadow-xl shrink-0 overflow-hidden relative border border-white/5">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-rose-600/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                 <div className="flex items-center gap-5 relative z-10">
-                    <div className="p-4 bg-rose-600 rounded-2xl shadow-xl" style={{ backgroundColor: systemInfo.primaryColor || '#ef4444' }}><ShieldAlert size={24}/></div>
+                    <div className="p-4 bg-rose-600 rounded-2xl shadow-xl"><ShieldAlert size={24}/></div>
                     <div>
                         <h2 className="text-2xl font-black uppercase leading-none tracking-tighter">Ocorrências Watchdog</h2>
                         <p className="text-rose-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2 opacity-80">Protocolo de Resiliência Operacional</p>
                     </div>
                 </div>
-                <button onClick={() => { setEditingIncident({ title: '', location: '', priority: priorities[0], status: 'OPEN', radius: 0, description: '', coordinates: systemInfo.coordinates }); setIsModalOpen(true); }} className="px-10 py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-2xl transition-all active:scale-95 flex items-center gap-3" style={{ backgroundColor: systemInfo.primaryColor || '#ef4444' }}>
+                <button onClick={() => { setEditingIncident({ title: '', location: '', priority: priorities[0], status: 'OPEN', radius: 0, description: '', coordinates: systemInfo.coordinates }); setIsModalOpen(true); }} className="px-10 py-4 bg-rose-600 hover:bg-rose-50 text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-2xl transition-all active:scale-95 flex items-center gap-3 sie-button">
                     <Plus size={18}/> Abrir Chamado SRE
                 </button>
             </div>
 
-            <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col relative">
                 {isLoading ? <div className="p-20 text-center"><Loader2 className="animate-spin text-rose-600 mx-auto" size={40}/></div> : (
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
                         <table className="w-full text-left border-separate border-spacing-0">
-                            <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b sticky top-0 z-10">
-                                <tr className="bg-white/95 backdrop-blur-md"><th className="p-8 border-b">Assunto / Protocolo</th><th className="p-8 text-center border-b">Severidade Tática</th><th className="p-8 text-center border-b">Estado</th><th className="p-8 text-right border-b">Ações</th></tr>
+                            <thead className="bg-white/90 backdrop-blur-md text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                                <tr><th className="p-8 border-b">Assunto / Protocolo</th><th className="p-8 text-center border-b">Severidade Tática</th><th className="p-8 text-center border-b">Estado</th><th className="p-8 text-right border-b">Ações</th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {incidents.map(i => (
@@ -228,7 +230,7 @@ const Operations = ({ systemInfo }: OperationsProps) => {
                                                 {i.priority}
                                             </span>
                                         </td>
-                                        <td className="p-8 text-center"><span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100 uppercase tracking-widest" style={{ color: systemInfo.primaryColor, borderColor: systemInfo.primaryColor + '40' }}>{i.status}</span></td>
+                                        <td className="p-8 text-center"><span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100 uppercase tracking-widest" style={{ color: primaryColor, borderColor: primaryColor + '40' }}>{i.status}</span></td>
                                         <td className="p-8 text-right"><button onClick={() => { setEditingIncident(i); setIsModalOpen(true); }} className="p-4 text-slate-300 hover:text-indigo-600 hover:bg-white hover:shadow-xl rounded-2xl transition-all border border-transparent hover:border-indigo-100"><Edit2 size={18}/></button></td>
                                     </tr>
                                 ))}
@@ -243,8 +245,8 @@ const Operations = ({ systemInfo }: OperationsProps) => {
 
             {isModalOpen && editingIncident && (
                 <div className="sie-editor-overlay">
-                    <div className="sie-modal-container !h-[85vh] !max-w-[1200px]">
-                        <div className="h-20 px-10 bg-slate-900 text-white flex justify-between items-center shrink-0 shadow-2xl relative z-20 border-b border-white/5">
+                    <div className="sie-modal-container !h-[90vh] !max-w-[1200px] self-center">
+                        <div className="h-24 px-10 bg-slate-900 text-white flex justify-between items-center shrink-0 shadow-2xl relative z-20 border-b border-white/5 rounded-t-[var(--sie-radius)]">
                             <div className="flex items-center gap-5">
                                 <div className="p-3.5 bg-rose-600 rounded-xl shadow-xl"><Shield size={22}/></div>
                                 <div>
@@ -254,30 +256,28 @@ const Operations = ({ systemInfo }: OperationsProps) => {
                             </div>
                             <div className="flex items-center gap-4">
                                 <button onClick={() => setIsModalOpen(false)} className="px-8 py-3.5 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-white transition-colors">Cancelar</button>
-                                <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-3 shadow-xl active:scale-95 shadow-rose-900/40">
+                                <button onClick={handleSave} disabled={isSaving} className="px-10 py-3.5 bg-rose-600 hover:bg-rose-50 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-3 shadow-xl active:scale-95 shadow-rose-900/40 sie-button">
                                     {isSaving ? <Loader2 className="animate-spin" size={16}/> : <ShieldCheck size={16}/>} Commitar Chamado
                                 </button>
                                 <button onClick={() => setIsModalOpen(false)} className="p-3.5 hover:bg-rose-500 hover:text-white text-slate-400 rounded-xl transition-all border border-white/5 ml-4"><X size={24}/></button>
                             </div>
                         </div>
 
-                        <div className="flex-1 flex overflow-hidden bg-[#f8fafc]">
-                            {/* Form Side */}
+                        <div className="flex-1 flex overflow-hidden bg-[#f8fafc] rounded-b-[var(--sie-radius)]">
                             <div className="w-1/2 overflow-y-auto p-12 custom-scrollbar space-y-10 border-r border-slate-200">
                                 <div className="space-y-4">
                                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">O que está ocorrendo?</label>
-                                    <input required className="w-full font-black h-16 bg-white border border-slate-200 rounded-2xl px-8 text-xl focus:border-rose-500 transition-all shadow-sm outline-none placeholder:text-slate-300" placeholder="EX: VAZAMENTO REDE MESTRE" value={editingIncident.title} onChange={e => setEditingIncident({...editingIncident, title: e.target.value.toUpperCase()})} />
+                                    <input required className="w-full font-black h-16 bg-white border border-slate-200 rounded-2xl px-8 text-xl focus:border-rose-500 transition-all shadow-sm outline-none placeholder:text-slate-300 sie-input" placeholder="EX: VAZAMENTO REDE MESTRE" value={editingIncident.title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingIncident({...editingIncident, title: e.target.value.toUpperCase()})} />
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-8">
                                     <div className="space-y-4">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Severidade</label>
-                                        <select className="w-full font-black h-14 bg-white border border-slate-200 rounded-xl px-6 text-xs uppercase appearance-none outline-none focus:border-rose-500 shadow-sm" value={editingIncident.priority} onChange={e => setEditingIncident({...editingIncident, priority: e.target.value as any})}>
+                                        <select className="w-full font-black h-14 bg-white border border-slate-200 rounded-xl px-6 text-xs uppercase appearance-none outline-none focus:border-rose-500 shadow-sm sie-input" value={editingIncident.priority} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditingIncident({...editingIncident, priority: e.target.value as any})}>
                                             {priorities.map(p => <option key={p} value={p}>{p}</option>)}
                                         </select>
                                     </div>
                                     
-                                    {/* ALERTA DE DISPARO MASSIVO */}
                                     {isAlertActive && (
                                         <div className="bg-rose-50 border-l-4 border-rose-500 p-6 rounded-r-xl animate-fade-in shadow-sm space-y-4">
                                             <div className="flex items-center gap-3 mb-2">
@@ -295,16 +295,13 @@ const Operations = ({ systemInfo }: OperationsProps) => {
                                                 <select 
                                                     className="w-full h-12 bg-white border border-rose-200 rounded-xl px-4 text-[10px] font-black uppercase text-rose-700 outline-none focus:border-rose-500 shadow-sm"
                                                     value={editingIncident.whatsapp_template_id || ''}
-                                                    onChange={e => setEditingIncident({...editingIncident, whatsapp_template_id: e.target.value})}
+                                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditingIncident({...editingIncident, whatsapp_template_id: e.target.value})}
                                                 >
                                                     <option value="">USAR MENSAGEM PADRÃO DO SISTEMA</option>
                                                     {templates.map(t => (
                                                         <option key={t.id} value={t.id}>{t.name} (Disparo Automático)</option>
                                                     ))}
                                                 </select>
-                                                <p className="text-[8px] font-bold text-rose-400 uppercase">
-                                                    Variáveis: {'{titulo}'}, {'{local}'}, {'{severidade}'}, {'{descricao}'}
-                                                </p>
                                             </div>
                                         </div>
                                     )}
@@ -314,7 +311,7 @@ const Operations = ({ systemInfo }: OperationsProps) => {
                                             <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Raio de Notificação (KM)</label>
                                             <span className="text-xl font-black text-rose-600">{editingIncident.radius} KM</span>
                                         </div>
-                                        <input type="range" min="0" max="10" step="0.5" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600" value={editingIncident.radius || 0} onChange={e => {
+                                        <input type="range" min="0" max="10" step="0.5" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-600" value={editingIncident.radius || 0} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                             const val = parseFloat(e.target.value);
                                             setEditingIncident({...editingIncident, radius: val});
                                             updateRadius(val);
@@ -324,10 +321,9 @@ const Operations = ({ systemInfo }: OperationsProps) => {
 
                                 <div className="space-y-4">
                                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Descrição Detalhada</label>
-                                    <textarea rows={4} className="w-full font-medium bg-white border border-slate-200 rounded-[2rem] p-8 text-sm focus:border-rose-500 transition-all shadow-sm outline-none uppercase leading-relaxed placeholder:text-slate-300" placeholder="DESCREVA OS DETALHES PARA A CENTRAL OPERACIONAL..." value={editingIncident.description} onChange={e => setEditingIncident({...editingIncident, description: e.target.value.toUpperCase()})} />
+                                    <textarea rows={4} className="w-full font-medium bg-white border border-slate-200 rounded-[2rem] p-8 text-sm focus:border-rose-500 transition-all shadow-sm outline-none uppercase leading-relaxed placeholder:text-slate-300" placeholder="DESCREVA OS DETALHES PARA A CENTRAL OPERACIONAL..." value={editingIncident.description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditingIncident({...editingIncident, description: e.target.value.toUpperCase()})} />
                                 </div>
 
-                                {/* Relator Info */}
                                 <div className="p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] flex items-center justify-between">
                                      <div className="flex items-center gap-4">
                                          <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-300 shadow-sm border border-slate-100"><User size={20}/></div>
@@ -336,60 +332,31 @@ const Operations = ({ systemInfo }: OperationsProps) => {
                                              <p className="text-sm font-black text-indigo-600 uppercase tracking-tight">{currentUser?.name || 'GERMINAL - ADMIN'} •</p>
                                          </div>
                                      </div>
-                                     <div className="text-right">
-                                         <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Validação</p>
-                                         <p className="text-[9px] font-black text-slate-400 uppercase">Geolocalizado</p>
-                                     </div>
                                 </div>
                             </div>
 
-                            {/* Map Side */}
                             <div className="w-1/2 relative bg-slate-200">
                                 <div ref={mapContainerRef} className="absolute inset-0 z-10 grayscale-[0.5] hover:grayscale-0 transition-all duration-700" />
-                                
-                                {/* Search Bar */}
                                 <div className="absolute top-6 left-6 right-6 z-20 flex gap-2">
                                     <div className="relative flex-1">
                                          <input 
-                                            className="w-full h-12 pl-12 pr-4 bg-white/90 backdrop-blur-md rounded-2xl text-xs font-bold shadow-xl border border-white/20 outline-none uppercase text-slate-700 focus:bg-white transition-all" 
+                                            className="w-full h-12 pl-12 pr-4 bg-white/90 backdrop-blur-md rounded-2xl text-xs font-bold shadow-xl border border-white/20 outline-none uppercase text-slate-700 focus:bg-white transition-all sie-input" 
                                             placeholder="BUSCAR ENDEREÇO..." 
                                             value={addressQuery}
-                                            onChange={e => setAddressQuery(e.target.value)}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddressQuery(e.target.value)}
                                             onKeyDown={e => e.key === 'Enter' && handleAddressSearch()}
                                         />
                                         <Search size={16} className="absolute left-4 top-4 text-slate-400"/>
                                     </div>
-                                    <button onClick={handleAddressSearch} disabled={isSearching} className="h-12 w-12 bg-indigo-600 text-white rounded-2xl shadow-xl flex items-center justify-center hover:bg-indigo-500 transition-all active:scale-95">
+                                    <button onClick={handleAddressSearch} disabled={isSearching} className="h-12 w-12 bg-indigo-600 text-white rounded-2xl shadow-xl flex items-center justify-center hover:bg-indigo-50 transition-all active:scale-95 sie-button">
                                         {isSearching ? <Loader2 size={18} className="animate-spin"/> : <Search size={18}/>}
                                     </button>
-                                </div>
-
-                                {/* Existing Controls */}
-                                <div className="absolute top-24 left-6 z-20 flex flex-col gap-3">
-                                    <div className="px-5 py-2.5 bg-slate-900/90 backdrop-blur-md text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-3 shadow-2xl border border-white/10">
-                                        <Crosshair size={14} className="text-rose-500 animate-pulse"/> Marcar Ponto
-                                    </div>
-                                    <button onClick={() => mapRef.current?.zoomIn()} className="w-10 h-10 bg-white rounded-xl shadow-xl flex items-center justify-center hover:bg-slate-50 transition-colors border border-slate-200"><Maximize2 size={18} className="text-slate-600"/></button>
-                                </div>
-                                <div className="absolute bottom-6 right-6 z-20">
-                                    <button onClick={() => {
-                                        const center = systemInfo.coordinates || { lat: -23.5505, lng: -46.6333 };
-                                        mapRef.current?.flyTo([center.lat, center.lng], 16);
-                                        markerRef.current?.setLatLng([center.lat, center.lng]);
-                                        setEditingIncident({...editingIncident, coordinates: center});
-                                        updateRadius(editingIncident.radius || 0);
-                                    }} className="p-4 bg-white text-slate-600 rounded-2xl shadow-2xl border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Navigation size={22}/></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-            <style>{`
-                .tactical-marker { display: flex; align-items: center; justify-content: center; }
-                input[type=range]::-webkit-slider-thumb { border: 4px solid white; height: 24px; width: 24px; border-radius: 50%; background: #f43f5e; cursor: pointer; -webkit-appearance: none; margin-top: -8px; box-shadow: 0 10px 20px rgba(244, 63, 94, 0.4); }
-                input[type=range]::-moz-range-thumb { border: 4px solid white; height: 24px; width: 24px; border-radius: 50%; background: #f43f5e; cursor: pointer; box-shadow: 0 10px 20px rgba(244, 63, 94, 0.4); }
-            `}</style>
         </div>
     );
 };

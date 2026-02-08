@@ -1,9 +1,10 @@
+
 import { IAProviderManager } from '../core/ai/IAProviderManager.js';
 import pool from '../config/database.js';
 
 /**
- * S.I.E AI CONTROLLER - V15.2
- * Protocolo SRE: Inteligência com Contexto Local e Otimização de Performance Neural.
+ * S.I.E AI CONTROLLER - V18.0 (VISION EXPANSION)
+ * Protocolo SRE: Inteligência com Contexto Local e Visão Computacional.
  */
 
 export const chat = async (req, res) => {
@@ -46,125 +47,109 @@ export const chat = async (req, res) => {
 };
 
 /**
- * AUTO-DOC SRE: Gera manuais de instrução otimizados
+ * NEURAL VISION LPR: Extração de metadados de veículos
  */
+export const visionLPR = async (req, res) => {
+    const { image } = req.body;
+    try {
+        const base64Data = image.includes(',') ? image.split(',')[1] : image;
+        const result = await IAProviderManager.execute('vision_lpr', {
+            model: IAProviderManager.MODELS.FAST,
+            contents: {
+                parts: [
+                    { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
+                    { text: "ATUE COMO: Sensor LPR SRE. Extraia em JSON: { 'plate': string, 'model': string, 'brand': string, 'color': string }. Se não houver veículo, retorne erro." }
+                ]
+            },
+            config: { responseMimeType: "application/json" }
+        });
+        
+        const vehicleData = JSON.parse(result.text);
+        
+        // Cruzamento instantâneo com o Ledger
+        const [rows] = await pool.query("SELECT * FROM vehicles WHERE plate = ?", [vehicleData.plate]);
+        
+        res.json({
+            ...vehicleData,
+            status: rows.length > 0 ? 'AUTHORIZED' : 'UNKNOWN',
+            owner_info: rows[0] || null
+        });
+    } catch (e) {
+        res.status(500).json({ error: "FALHA_AO_PROCESSAR_VISAO" });
+    }
+};
+
+/**
+ * PERIMETER ANALYSIS: Detecção de anomalias em vídeo
+ */
+export const analyzePerimeter = async (req, res) => {
+    const { image, location } = req.body;
+    try {
+        const base64Data = image.includes(',') ? image.split(',')[1] : image;
+        const result = await IAProviderManager.execute('perimeter_guard', {
+            model: IAProviderManager.MODELS.FAST,
+            contents: {
+                parts: [
+                    { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
+                    { text: `Analise a segurança deste perímetro (${location}). Identifique pessoas suspeitas, veículos mal posicionados ou situações de risco. Retorne um diagnóstico curto em CAIXA ALTA.` }
+                ]
+            }
+        });
+        res.json({ analysis: result.text });
+    } catch (e) {
+        res.status(500).json({ error: "DRONE_NEURAL_OFFLINE" });
+    }
+};
+
 export const generateSystemManuals = async (req, res) => {
     const { modules } = req.body;
     try {
-        // Redução de carga: Prompt mais direto para evitar geração de HTML pesado que causa timeout
         const prompt = `Atue como Documentador SRE. 
         Crie manuais de instrução CONCISOS em HTML para estes módulos:
         ${JSON.stringify(modules)}
-
-        REQUISITOS (MÁX 1500 caracteres por manual):
-        - Objetivo direto.
-        - 3 Passos principais do fluxo.
-        - Protocolo SRE sugerido.
-
-        RETORNE UM JSON ARRAY:
-        [
-           {
-             "category": "CORE|OPERATIONAL|GOVERNANCE|FINANCE",
-             "title": "MANUAL: [NOME]",
-             "slug": "manual-id",
-             "content": "HTML CONCISO"
-           }
-        ]`;
+        RETORNE UM JSON ARRAY: [{ "category": "CORE", "title": "MANUAL", "slug": "manual-id", "content": "HTML" }]`;
 
         const aiResponse = await IAProviderManager.execute('auto_doc', {
             contents: prompt,
-            config: { 
-                responseMimeType: "application/json",
-                systemInstruction: "SRE Documentation Specialist. Seja técnico e extremamente conciso para evitar latência excessiva."
-            }
+            config: { responseMimeType: "application/json" }
         });
 
-        let entries = [];
-        try {
-            entries = JSON.parse(aiResponse.text);
-        } catch (parseError) {
-            console.error("FALHA NO PARSE AUTO-DOC:", aiResponse.text);
-            throw new Error("Resposta da IA não é um JSON válido.");
-        }
-        
-        if (!Array.isArray(entries)) entries = [entries];
-
+        const entries = JSON.parse(aiResponse.text);
         for (const entry of entries) {
-            if (!entry.title || !entry.content) continue;
             await pool.query(
                 "INSERT INTO wiki_entries (category, title, slug, content, is_system) VALUES (?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE content = VALUES(content)",
-                [entry.category || 'CORE', entry.title, entry.slug || `manual-${Date.now()}`, entry.content]
+                [entry.category, entry.title, entry.slug, entry.content]
             );
         }
-
         res.json({ success: true, count: entries.length });
-    } catch (e) {
-        console.error("[SRE AUTO-DOC FAIL]", e.message);
-        res.status(500).json({ error: "Falha na Auto-Documentação: " + e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
 export const bulkWikiIngestion = async (req, res) => {
     const { rawText } = req.body;
     try {
-        const prompt = `Analise o seguinte texto bruto e fragmente-o em múltiplos artigos para uma Wiki.
-        TEXTO BRUTO: ${rawText}
-        
-        REQUISITOS DE SAÍDA (JSON ARRAY):
-        [
-          {
-            "category": "CORE|LEGAL|FINANCE|OPERATIONAL|ESG|AI|DESIGN",
-            "title": "Título Curto",
-            "slug": "slug-unico",
-            "content": "HTML/Markdown"
-          }
-        ]
-        Mínimo 1 e máximo 3 artigos.`;
-
+        const prompt = `Organize em JSON para Wiki: ${rawText}`;
         const aiResponse = await IAProviderManager.execute('wiki_ingestion', {
             contents: prompt,
-            config: { 
-                responseMimeType: "application/json",
-                systemInstruction: "SRE Wiki Architect. Organize dados brutos em doutrina estruturada JSON."
-            }
+            config: { responseMimeType: "application/json" }
         });
-
-        let entries = [];
-        try {
-            entries = JSON.parse(aiResponse.text);
-        } catch (parseError) {
-            throw new Error("Erro ao converter resposta da IA em dados estruturados.");
-        }
-
-        if (!Array.isArray(entries)) entries = [entries];
-        
+        const entries = JSON.parse(aiResponse.text);
         for (const entry of entries) {
-            if (!entry.title || !entry.content) continue;
             await pool.query(
                 "INSERT INTO wiki_entries (category, title, slug, content, is_system) VALUES (?, ?, ?, ?, 0) ON DUPLICATE KEY UPDATE content = VALUES(content)",
-                [entry.category || 'OPERATIONAL', entry.title, entry.slug || `ingest-${Date.now()}`, entry.content]
+                [entry.category, entry.title, entry.slug, entry.content]
             );
         }
-
-        res.json({ success: true, count: entries.length, entries });
-    } catch (e) {
-        console.error("[SRE WIKI INGESTION FAIL]", e.message);
-        res.status(500).json({ error: "Falha no processamento neural da Wiki: " + e.message });
-    }
+        res.json({ success: true, count: entries.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
 export const generateDossier = async (req, res) => {
     try {
-        const [users] = await pool.query(
-            "SELECT id, name, cpf_cnpj, unit, age, role, status, cep, street, number, complement, neighborhood, city, state, socialData FROM users WHERE id = ?",
-            [req.params.id]
-        );
-        if (!users.length) return res.status(404).json({ error: 'Membro não localizado.' });
+        const [users] = await pool.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
         const user = users[0];
         const [financials] = await pool.query("SELECT * FROM financials WHERE user_id = ? LIMIT 50", [req.params.id]);
-        const [censos] = await pool.query("SELECT answers FROM survey_responses WHERE cpf = ? LIMIT 1", [user.cpf_cnpj]);
-
-        const context = { membro: user, ledger: financials, censo: censos[0]?.answers || {} };
+        const context = { membro: user, ledger: financials };
         const result = await IAProviderManager.execute('dossier', {
             contents: `Gere um DOSSIÊ TÁTICO: ${JSON.stringify(context)}.`,
             config: { systemInstruction: "Analista de Risco S.I.E PRO." }
@@ -177,7 +162,7 @@ export const generateDocument = async (req, res) => {
     const { prompt, context } = req.body;
     try {
         const result = await IAProviderManager.execute('ghostwriter', {
-            contents: `Ghostwriter SRE. Redija em HTML: ${prompt}. Contexto: ${context}`,
+            contents: `HTML: ${prompt}. Contexto: ${context}`,
             config: { systemInstruction: "Ghostwriter Jurídico." }
         });
         res.json({ text: result.text });
@@ -198,13 +183,5 @@ export const ocr = async (req, res) => {
             config: { responseMimeType: "application/json" }
         });
         res.json(JSON.parse(result.text));
-    } catch (e) { res.status(500).json({ error: e.message }); }
-};
-
-export const textToSpeech = async (req, res) => {
-    const { text, voice } = req.body;
-    try {
-        const result = await IAProviderManager.execute('tts', { contents: text, voice: voice || 'Zephyr' });
-        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 };

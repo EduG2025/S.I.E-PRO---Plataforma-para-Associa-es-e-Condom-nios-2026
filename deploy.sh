@@ -1,9 +1,10 @@
+
 #!/bin/bash
-# 🚀 S.I.E PRO - VPS DEPLOYMENT PROTOCOL V240.4 (SRE)
-# Protocolo de Resiliência de Instalação.
+# 🚀 S.I.E PRO - VPS DEPLOYMENT PROTOCOL V240.5 (SRE)
+# Protocolo de Resiliência de Instalação e Build.
 
 echo "--------------------------------------------------------"
-echo "  S.I.E PRO - SISTEMA INTELIGENTE ATIVO V240.4"
+echo "  S.I.E PRO - SISTEMA INTELIGENTE ATIVO V240.5"
 echo "  PROTOCOLO SRE DE DEPLOY EM AMBIENTE DE MISSÃO CRÍTICA"
 echo "--------------------------------------------------------"
 
@@ -14,11 +15,11 @@ sudo chmod -R 755 .
 
 # 2. Instalação de Dependências
 echo "📦 [2/5] Sincronizando dependências (Clean Install)..."
-# Limpa node_modules se houver erro de inconsistência reportado
 if [ "$1" == "--clean" ]; then
+    echo "🧹 Limpeza de cache node_modules solicitada..."
     rm -rf node_modules package-lock.json
 fi
-npm install --include=dev
+npm install
 
 # 3. Compilação do Frontend
 echo "🏗️ [3/5] Gerando build otimizado (Vite)..."
@@ -34,10 +35,16 @@ echo "✅ Ambiente validado."
 
 # 5. Orquestração via PM2
 echo "⚙️ [5/5] Reiniciando Kernel via PM2..."
-pm2 delete sie-kernel 2>/dev/null
-pm2 start server.js --name "sie-kernel"
+# Verifica se o processo já existe para decidir entre restart ou start
+if pm2 list | grep -q "sie-kernel"; then
+    pm2 restart sie-kernel --update-env
+else
+    pm2 start server.js --name "sie-kernel"
+fi
 pm2 save
 
 echo "--------------------------------------------------------"
-echo "🚀 CLUSTER OPERACIONAL! Verifique logs com: pm2 logs sie-kernel"
+echo "🚀 CLUSTER OPERACIONAL!"
+echo "📈 Use: 'pm2 monit' para telemetria em tempo real."
+echo "📝 Use: 'pm2 logs sie-kernel' para auditoria de rede."
 echo "--------------------------------------------------------"

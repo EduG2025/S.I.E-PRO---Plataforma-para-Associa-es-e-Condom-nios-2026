@@ -1,230 +1,126 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  /* Variáveis Nucleares - Soberania StudioLab Master */
   --sie-primary: #4f46e5;
-  --sie-success: #10b981;
-  --sie-danger: #ef4444;
-  --sie-warning: #f59e0b;
-  --sie-surface: #f8fafc;
-  --sie-radius: 1.5rem;
-  --sie-viewport-padding: 2rem;
-  --sie-sidebar-width: 280px;
-  --sie-sidebar-width-collapsed: 80px;
-  --sie-footer-height: 80px;
+  --sie-emerald: #10b981;
+  --sie-rose: #f43f5e;
+  --sie-amber: #f59e0b;
+  --sie-slate: #020617;
+  --sie-radius: 2.5rem;
+  --sie-glass: rgba(255, 255, 255, 0.03);
   --sie-font-base: 16px;
-  --sie-font-scale: 1.2;
-  --sie-border-spacing: 24px;
-  --sie-padding-inner: 32px;
-  --sie-form-overlap: 20px;
-  --sie-input-h: 56px;
-  
-  /* SRE Master Typography */
-  --sie-font-weight-heading: 900;
-  --sie-letter-spacing: -0.05em;
-  
-  /* SRE Master UI Details */
-  --sie-button-radius: 1rem;
-  --sie-button-weight: 900;
-  --sie-input-border-w: 1px;
-  --sie-card-border-w: 1px;
-  --sie-glass-opacity: 0.96;
-
-  /* Sidebar Dinâmica */
-  --sie-sidebar-bg: #020617;
-  --sie-sidebar-active: #4f46e5;
-  --sie-sidebar-text: #94a3b8;
-  --sie-sidebar-border: rgba(255, 255, 255, 0.08);
-  --sie-sidebar-hover: rgba(255, 255, 255, 0.05);
-  
-  /* Sombras Dinâmicas */
-  --sie-shadow-opacity: 0.1;
-  --sie-shadow: 0 10px 15px -3px rgba(0, 0, 0, var(--sie-shadow-opacity));
-  --sie-shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, var(--sie-shadow-opacity));
-
-  /* Alinhamento de Título */
-  --sie-title-align: left;
-  --sie-title-justify: flex-start;
 }
 
-/* SRE: Reset de Viewport Absoluto */
-html,
-body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  font-family: 'Inter', sans-serif;
-  background-color: var(--sie-surface);
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden; 
+@layer base {
+  body {
+    @apply bg-[#020617] text-slate-300 font-sans antialiased overflow-hidden selection:bg-indigo-600 selection:text-white;
+  }
 }
 
-#root {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  overflow: hidden;
+/* SRE CYBER AESTHETIC CLASSES */
+.sre-scanline {
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.15) 50%
+  ),
+  linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 2px 100%;
+  pointer-events: none;
 }
 
-/* Orquestrador de Viewport */
-main {
-  flex: 1;
-  height: 100%;
-  overflow: hidden; 
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background-color: var(--sie-surface);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Sidebar Glass SRE Standard */
 .sidebar-glass {
-  width: var(--sie-sidebar-width);
-  height: 100%;
-  flex-shrink: 0;
-  background: var(--sidebar-bg) !important;
-  backdrop-filter: blur(30px) saturate(150%) !important;
-  border-right: 1px solid var(--sidebar-border) !important;
-  z-index: 100;
-  overflow-y: auto;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease, border 0.3s ease;
+  background: rgba(2, 6, 23, 0.98);
+  backdrop-filter: blur(25px) saturate(200%);
+  -webkit-backdrop-filter: blur(25px) saturate(200%);
 }
 
-/* VDNA: CLASSES SEMÂNTICAS UNIVERSAIS */
 .sie-card {
-  background-color: #ffffff;
-  border-radius: var(--sie-radius);
-  padding: var(--sie-padding-inner);
-  margin: var(--sie-border-spacing);
-  box-shadow: var(--sie-shadow);
-  border: var(--sie-card-border-w) solid #e2e8f0;
-  transition: all 0.3s ease;
-}
-
-.sie-card:hover {
-  box-shadow: var(--sie-shadow-lg);
-  border-color: var(--sie-primary);
-}
-
-.sie-input {
-  height: var(--sie-input-h);
-  border-radius: calc(var(--sie-radius) * 0.7);
-  padding: 0 1.5rem;
-  background-color: #f8fafc;
-  border: var(--sie-input-border-w) solid #e2e8f0;
-  font-size: var(--sie-font-base);
-  font-weight: 700;
-  text-transform: uppercase;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.sie-input:focus {
-  background-color: #ffffff;
-  border-color: var(--sie-primary);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+  @apply bg-white rounded-[3rem] border border-slate-200 shadow-sm transition-all duration-500 hover:shadow-2xl hover:border-indigo-300;
 }
 
 .sie-button {
-  height: var(--sie-input-h);
-  border-radius: var(--sie-button-radius);
-  padding: 0 2rem;
-  font-weight: var(--sie-button-weight);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: calc(var(--sie-font-base) * 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  transition: all 0.2s ease;
-  cursor: pointer;
+  @apply transition-all active:scale-95 shadow-xl hover:shadow-2xl;
 }
 
-.sie-button-primary {
-  background-color: var(--sie-primary);
-  color: #ffffff;
-  box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
+.sie-input {
+  @apply outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all;
 }
 
-.sie-button-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
+.animate-pulse-soft {
+  animation: pulse-soft 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-.sie-header-title {
-  font-size: calc(var(--sie-font-base) * var(--sie-font-scale) * 1.5);
-  font-weight: var(--sie-font-weight-heading);
-  letter-spacing: var(--sie-letter-spacing);
-  text-align: var(--sie-title-align);
-  text-transform: uppercase;
-  line-height: 1;
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(0.99); }
 }
 
-.sie-header-slogan {
-  font-size: calc(var(--sie-font-base) * 0.6);
-  font-weight: 900;
-  letter-spacing: 0.3em;
-  text-align: var(--sie-title-align);
-  text-transform: uppercase;
-  color: #94a3b8;
-  margin-top: 0.5rem;
+.animate-glow-indigo {
+  box-shadow: 0 0 20px rgba(79, 70, 229, 0.2);
 }
 
-.sie-viewport-content {
-  flex: 1;
-  height: 100%;
-  width: 100%;
-  padding: var(--sie-viewport-padding);
-  padding-bottom: calc(var(--sie-viewport-padding) + var(--sie-footer-h));
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; 
+.animate-shake {
+  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
 }
 
-.sie-editor-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(2, 6, 23, var(--sie-glass-opacity));
-  backdrop-filter: blur(20px);
-  z-index: 9990 !important; /* Ajustado para permitir modais sobre ele */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sie-viewport-padding);
-  animation: overlayFadeIn 0.3s ease-out forwards;
+@keyframes shake {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.2);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4f46e5;
 }
 
 .sie-modal-container {
-  background: white;
-  width: 100%;
-  max-width: 1200px;
-  height: auto;
-  max-height: 100%;
-  overflow: hidden;
-  box-shadow: 0 50px 150px -20px rgba(0, 0, 0, 0.9);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  animation: modalScaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  border-radius: var(--sie-radius) !important; 
+  @apply bg-white shadow-2xl rounded-[3rem] border border-white/10 overflow-hidden relative;
 }
 
-.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(79, 70, 229, 0.2); border-radius: 20px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--sie-primary); }
+.sie-editor-overlay {
+  @apply fixed inset-0 z-[1000] bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4;
+}
 
-@keyframes overlayFadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes modalScaleUp { from { transform: scale(0.95) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
 
-@media (max-width: 640px) {
-  :root { --sie-viewport-padding: 0.75rem; }
-  .sie-modal-container { height: 100%; max-height: 100%; margin: 0; border-radius: 0 !important; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
 }

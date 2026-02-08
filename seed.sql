@@ -26,7 +26,7 @@ INSERT INTO `ai_prompts` (`title`, `category`, `role_restriction`, `content`, `i
 
 -- 3. CONFIGURAÇÕES SINGLETON
 UPDATE `settings` SET 
-`name` = 'S.I.E PRO - SISTEMA INTELIGENTE ATIVO',
+`name` = 'S.I.E — SISTEMA INTELIGENTE ATIVO PARA ASSOCIAÇÕES, CONDOMÍNIOS E GESTÃO COLETIVA',
 `shortName` = 'S.I.E PRO',
 `module_metadata` = '{"dashboard": {"title": "COMANDO CENTRAL", "slogan": "INTELIGÊNCIA OPERACIONAL EM TEMPO REAL"}}'
 WHERE `id` = 1;

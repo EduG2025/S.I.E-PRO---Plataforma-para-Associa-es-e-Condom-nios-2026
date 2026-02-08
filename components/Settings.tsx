@@ -21,7 +21,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// --- COMPONENTES AUXILIARES (LEAFLET MAP) ---
+// --- COMPONENTE AUXILIARES (LEAFLET MAP) ---
 const MapContainerAny = MapContainer as any;
 const TileLayerAny = TileLayer as any;
 const MarkerAny = Marker as any;
@@ -42,7 +42,7 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [mapStyle, setMapStyle] = useState<'STREET' | 'SATELLITE'>('STREET');
-    
+
     const mapRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
 
@@ -98,35 +98,35 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
                     </div>
                     <button onClick={onClose} className="p-4 hover:bg-rose-500 rounded-2xl transition-all text-slate-400 hover:text-white"><X size={32} /></button>
                 </div>
-                
+
                 <div className="flex-1 relative z-0 overflow-hidden bg-slate-100">
                     {/* BARRA DE PESQUISA FLUTUANTE */}
                     <div className="absolute top-6 left-6 z-[1000] w-full max-w-md">
                         <div className="relative group">
                             <div className="absolute inset-0 bg-white/80 rounded-2xl blur-lg shadow-xl opacity-0 group-hover:opacity-100 transition-all"></div>
                             <div className="relative flex bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     className="flex-1 pl-6 pr-4 py-4 text-xs font-black uppercase outline-none text-slate-700 placeholder:text-slate-300"
                                     placeholder="PESQUISAR ENDEREÇO OU COORDENADA..."
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && handleSearch()}
                                 />
-                                <button 
+                                <button
                                     onClick={handleSearch}
                                     disabled={isSearching}
                                     className="px-6 bg-slate-900 text-white hover:bg-indigo-600 transition-colors"
                                 >
-                                    {isSearching ? <Loader2 size={18} className="animate-spin"/> : <Search size={18}/>}
+                                    {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
                                 </button>
                             </div>
                         </div>
-                        
+
                         {searchResults.length > 0 && (
                             <div className="mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-slide-down max-h-60 overflow-y-auto custom-scrollbar">
                                 {searchResults.map((res: any, idx) => (
-                                    <button 
+                                    <button
                                         key={idx}
                                         onClick={() => selectLocation(parseFloat(res.lat), parseFloat(res.lon))}
                                         className="w-full text-left p-4 hover:bg-indigo-50 border-b border-slate-100 last:border-0 transition-colors group"
@@ -141,19 +141,19 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
 
                     {/* CONTROLE DE CAMADAS */}
                     <div className="absolute top-6 right-6 z-[1000] flex bg-white/90 backdrop-blur rounded-2xl p-1 shadow-2xl border border-slate-200">
-                        <button 
-                            onClick={() => setMapStyle('STREET')} 
+                        <button
+                            onClick={() => setMapStyle('STREET')}
                             className={`p-3 rounded-xl transition-all ${mapStyle === 'STREET' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-600'}`}
                             title="Mapa de Rua"
                         >
-                            <MapIcon2 size={18}/>
+                            <MapIcon2 size={18} />
                         </button>
-                        <button 
-                            onClick={() => setMapStyle('SATELLITE')} 
+                        <button
+                            onClick={() => setMapStyle('SATELLITE')}
                             className={`p-3 rounded-xl transition-all ${mapStyle === 'SATELLITE' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-600'}`}
                             title="Satélite"
                         >
-                            <Satellite size={18}/>
+                            <Satellite size={18} />
                         </button>
                     </div>
 
@@ -164,15 +164,15 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
                         zoomControl={false}
                         ref={mapRef}
                     >
-                        <TileLayerAny 
-                            url={mapStyle === 'STREET' 
+                        <TileLayerAny
+                            url={mapStyle === 'STREET'
                                 ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                                 : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                            } 
+                            }
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         />
-                        <MarkerAny 
-                            position={[position.lat, position.lng]} 
+                        <MarkerAny
+                            position={[position.lat, position.lng]}
                             draggable={true}
                             eventHandlers={eventHandlers}
                             ref={markerRef}
@@ -195,7 +195,7 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="h-24 px-10 border-t bg-slate-50 flex justify-between items-center shrink-0 relative z-20">
                     <div className="flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -204,7 +204,7 @@ const MapModal = ({ initialCoords, onClose, onSave }: any) => {
                         </span>
                     </div>
                     <button onClick={() => onSave(position)} className="px-12 py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all active:scale-95 flex items-center gap-2">
-                        <Save size={16}/> Salvar Georreferenciamento
+                        <Save size={16} /> Salvar Georreferenciamento
                     </button>
                 </div>
             </div>
@@ -246,7 +246,7 @@ interface SettingsProps {
 // --- COMPONENTE PRINCIPAL ---
 const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSystem, currentUser }: SettingsProps) => {
     // -- TABS & NAVIGATION --
-    const [activeTab, setActiveTab] = useState<'INFO' | 'STUDIO' | 'AI_PROVIDERS' | 'AI_PROMPTS' | 'SUBSCRIPTIONS' | 'PERMISSIONS' | 'WIKI'>('INFO');
+    const [activeTab, setActiveTab] = useState<'INFO' | 'AI_PROVIDERS' | 'AI_PROMPTS' | 'SUBSCRIPTIONS' | 'PERMISSIONS' | 'WIKI'>('INFO');
 
     // -- STATES (CORE) --
     const [isSaving, setIsSaving] = useState(false);
@@ -254,7 +254,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isSearchingCEP, setIsSearchingCEP] = useState(false);
     const [isLocatingGPS, setIsLocatingGPS] = useState(false);
-    
+
     // -- STATES (BATCH TOOLS) --
     const [isBatchRunning, setIsBatchRunning] = useState(false);
 
@@ -292,13 +292,16 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
         billing_reminder_2d: true,
         billing_reminder_1d: true,
         late_reminder: true,
-        welcome_msg: true
+        welcome_msg: true,
+        chatbot_enabled: true,
+        chatbot_rag_wiki: true,
+        chatbot_rag_rbac: true
     });
 
     const [metadata, setMetadata] = useState<any>((systemInfo as any)?.module_metadata || {});
 
     // -- EFFECTS --
-    
+
     // SRE CORE: Hydrate Settings with FULL DATA (Authenticated Fetch)
     useEffect(() => {
         const loadFullSettings = async () => {
@@ -562,14 +565,13 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                     <div className="p-4 bg-indigo-600 rounded-[1.5rem] text-white shadow-2xl" style={{ backgroundColor: primaryColor }}><SettingsIcon size={26} /></div>
                     <div>
                         <h1 className="text-2xl font-black uppercase tracking-tightest leading-none">Console Master</h1>
-                        <p className="text-[9px] font-black uppercase text-indigo-400 mt-2 tracking-[0.4em] opacity-80 italic">Protocolo SRE v38.0</p>
+                        <p className="text-[9px] font-black uppercase text-indigo-400 mt-2 tracking-[0.4em] opacity-80 italic">Protocolo SRE v40.0</p>
                     </div>
                 </div>
 
                 <div className="flex-1 flex overflow-x-auto gap-2 py-1 no-scrollbar lg:justify-end items-center relative z-10">
                     {[
                         { id: 'INFO', label: 'Identidade', icon: Building },
-                        { id: 'STUDIO', label: 'Studio Lab', icon: LayoutGrid },
                         { id: 'SUBSCRIPTIONS', label: 'Assinaturas', icon: CreditCard },
                         { id: 'WIKI', label: 'Wiki Hub', icon: BookOpen },
                         { id: 'AI_PROVIDERS', label: 'Pool Neural', icon: Brain },
@@ -590,7 +592,6 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
 
             <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#fcfcfd] p-6 lg:p-14">
 
-                {activeTab === 'STUDIO' && <StudioLab systemInfo={localInfo} designSystem={designSystem} setDesignSystem={setDesignSystem} />}
                 {activeTab === 'WIKI' && <WikiHub systemInfo={localInfo} />}
 
                 {/* ABA: IDENTIDADE */}
@@ -600,7 +601,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                         {currentUser?.role === 'ADMIN' && (
                             <div className="bg-slate-900 rounded-[3.5rem] p-8 border border-white/10 shadow-xl flex items-center justify-between">
                                 <div className="flex items-center gap-4 text-white">
-                                    <ShieldAlert size={28} className="text-rose-500"/>
+                                    <ShieldAlert size={28} className="text-rose-500" />
                                     <div>
                                         <h3 className="text-sm font-black uppercase tracking-widest">Controle de Soberania (Kill Switch)</h3>
                                         <p className="text-[10px] text-slate-400 uppercase tracking-widest">Gerenciamento remoto de licença de uso.</p>
@@ -608,10 +609,10 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                 </div>
                                 <div className="flex gap-4">
                                     <button onClick={() => handleToggleLicense('SUSPENDED')} className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
-                                        <PauseCircle size={16}/> Suspender
+                                        <PauseCircle size={16} /> Suspender
                                     </button>
                                     <button onClick={() => handleToggleLicense('ACTIVE')} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
-                                        <PlayCircle size={16}/> Ativar
+                                        <PlayCircle size={16} /> Ativar
                                     </button>
                                 </div>
                             </div>
@@ -703,7 +704,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     <input maxLength={2} className="w-full font-black h-16 bg-slate-50 border border-slate-200 rounded-3xl px-8 uppercase shadow-sm" value={localInfo?.state || ''} onChange={e => setLocalInfo({ ...localInfo, state: e.target.value.toUpperCase() })} />
                                 </div>
                             </div>
-                            
+
                             <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[3rem] flex items-center justify-between shadow-inner">
                                 <div className="flex items-center gap-6">
                                     <div className="p-4 bg-white rounded-2xl text-indigo-600 shadow-sm"><RefreshCw size={28} /></div>
@@ -715,7 +716,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     </div>
                                 </div>
                                 <button onClick={handleBatchGeocode} disabled={isBatchRunning} className="px-8 py-3 bg-white text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2">
-                                   {isBatchRunning ? <Loader2 size={14} className="animate-spin" /> : <Crosshair size={14} />} Sincronizar Coordenadas
+                                    {isBatchRunning ? <Loader2 size={14} className="animate-spin" /> : <Crosshair size={14} />} Sincronizar Coordenadas
                                 </button>
                             </div>
                         </div>
@@ -781,7 +782,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                 {/* ABA: SUBSCRIPTIONS (CADASTRO DE PLANOS) */}
                 {activeTab === 'SUBSCRIPTIONS' && (
                     <div className="space-y-12 animate-fade-in max-w-7xl mx-auto pb-20">
-                         <div className="bg-slate-900 p-12 rounded-[4rem] text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-12">
+                        <div className="bg-slate-900 p-12 rounded-[4rem] text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-12">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><CreditCard size={300} /></div>
                             <div className="relative z-10">
                                 <h3 className="text-4xl font-black uppercase tracking-tightest leading-none">Modelos de <br /> Assinatura</h3>
@@ -798,8 +799,8 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     <div className="flex justify-between items-start mb-6">
                                         <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl shadow-inner group-hover:scale-110 transition-transform"><LayoutGrid size={24} /></div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => { setEditingPlan(plan); setIsPlanModalOpen(true); }} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit3 size={18}/></button>
-                                            <button onClick={async () => { if (confirm("Remover plano?")) { await planService.delete(plan.id); loadPlans(); } }} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={18}/></button>
+                                            <button onClick={() => { setEditingPlan(plan); setIsPlanModalOpen(true); }} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit3 size={18} /></button>
+                                            <button onClick={async () => { if (confirm("Remover plano?")) { await planService.delete(plan.id); loadPlans(); } }} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={18} /></button>
                                         </div>
                                     </div>
                                     <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-2">{plan.name}</h3>
@@ -897,8 +898,8 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                             {prompt.is_favorite ? <Zap size={24} /> : <FileCode size={24} />}
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => { setEditingPrompt(prompt); setIsPromptModalOpen(true); }} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit3 size={18}/></button>
-                                            <button onClick={async () => { if (confirm("Remover prompt?")) { await aiService.deletePrompt(prompt.id); loadPrompts(); } }} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={18}/></button>
+                                            <button onClick={() => { setEditingPrompt(prompt); setIsPromptModalOpen(true); }} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Edit3 size={18} /></button>
+                                            <button onClick={async () => { if (confirm("Remover prompt?")) { await aiService.deletePrompt(prompt.id); loadPrompts(); } }} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={18} /></button>
                                         </div>
                                     </div>
                                     <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-2">{prompt.title}</h3>
@@ -917,7 +918,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                             ))}
                             {prompts.length === 0 && (
                                 <div className="col-span-full py-20 text-center opacity-30">
-                                    <MessageSquare size={48} className="mx-auto mb-4"/>
+                                    <MessageSquare size={48} className="mx-auto mb-4" />
                                     <p className="text-[10px] font-black uppercase">Biblioteca de Prompts Vazia</p>
                                 </div>
                             )}
@@ -1012,16 +1013,16 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                             <form onSubmit={handleSavePlan} className="space-y-6">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Plano / Título Financeiro</label>
-                                    <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500 shadow-inner" placeholder="EX: TAXA ASSOCIATIVA MENSAL" value={editingPlan.name} onChange={e => setEditingPlan({...editingPlan, name: e.target.value.toUpperCase()})} />
+                                    <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500 shadow-inner" placeholder="EX: TAXA ASSOCIATIVA MENSAL" value={editingPlan.name} onChange={e => setEditingPlan({ ...editingPlan, name: e.target.value.toUpperCase() })} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-8">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Valor Unitário (R$)</label>
-                                        <input type="number" step="0.01" className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-xl font-black outline-none focus:border-indigo-500" value={editingPlan.price} onChange={e => setEditingPlan({...editingPlan, price: e.target.value})} />
+                                        <input type="number" step="0.01" className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-xl font-black outline-none focus:border-indigo-500" value={editingPlan.price} onChange={e => setEditingPlan({ ...editingPlan, price: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ciclo de Cobrança</label>
-                                        <select className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-[10px] font-black uppercase outline-none" value={editingPlan.billing_cycle} onChange={e => setEditingPlan({...editingPlan, billing_cycle: e.target.value})}>
+                                        <select className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-6 text-[10px] font-black uppercase outline-none" value={editingPlan.billing_cycle} onChange={e => setEditingPlan({ ...editingPlan, billing_cycle: e.target.value })}>
                                             <option value="monthly">Protocolo Mensal</option>
                                             <option value="quarterly">Protocolo Trimestral</option>
                                             <option value="yearly">Protocolo Anual</option>
@@ -1030,12 +1031,12 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descrição & Cobertura</label>
-                                    <textarea rows={4} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm outline-none focus:bg-white transition-all shadow-inner" value={editingPlan.description} onChange={e => setEditingPlan({...editingPlan, description: e.target.value})} placeholder="Descreva o que este plano abrange..." />
+                                    <textarea rows={4} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm outline-none focus:bg-white transition-all shadow-inner" value={editingPlan.description} onChange={e => setEditingPlan({ ...editingPlan, description: e.target.value })} placeholder="Descreva o que este plano abrange..." />
                                 </div>
                                 <div className="pt-6 border-t border-slate-100 flex gap-4">
                                     <button type="button" onClick={() => setIsPlanModalOpen(false)} className="flex-1 py-5 text-slate-400 font-black text-[10px] uppercase tracking-widest">Abortar</button>
                                     <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-950 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3">
-                                        {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Sincronizar Plano
+                                        {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Sincronizar Plano
                                     </button>
                                 </div>
                             </form>
@@ -1121,16 +1122,16 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                 <form onSubmit={handleSavePrompt} className="space-y-6">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Título do Prompt</label>
-                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500 shadow-inner" placeholder="EX: RESUMO DE ATA JURÍDICA" value={editingPrompt.title} onChange={e => setEditingPrompt({...editingPrompt, title: e.target.value.toUpperCase()})} />
+                                        <input required className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500 shadow-inner" placeholder="EX: RESUMO DE ATA JURÍDICA" value={editingPrompt.title} onChange={e => setEditingPrompt({ ...editingPrompt, title: e.target.value.toUpperCase() })} />
                                     </div>
                                     <div className="grid grid-cols-2 gap-8">
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
-                                            <input className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500" value={editingPrompt.category} onChange={e => setEditingPrompt({...editingPrompt, category: e.target.value.toUpperCase()})} />
+                                            <input className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 text-sm font-black uppercase outline-none focus:border-indigo-500" value={editingPrompt.category} onChange={e => setEditingPrompt({ ...editingPrompt, category: e.target.value.toUpperCase() })} />
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Restringir ao Cargo</label>
-                                            <select className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 text-[10px] font-black uppercase outline-none" value={editingPrompt.role_restriction} onChange={e => setEditingPrompt({...editingPrompt, role_restriction: e.target.value})}>
+                                            <select className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl px-4 text-[10px] font-black uppercase outline-none" value={editingPrompt.role_restriction} onChange={e => setEditingPrompt({ ...editingPrompt, role_restriction: e.target.value })}>
                                                 <option value="ALL">TODOS (IRRESTRITO)</option>
                                                 {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
                                             </select>
@@ -1138,7 +1139,7 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     </div>
                                     <div className="flex items-end pb-2">
                                         <label className="flex items-center gap-3 cursor-pointer group">
-                                            <div onClick={() => setEditingPrompt({...editingPrompt, is_favorite: editingPrompt.is_favorite ? 0 : 1})} className={`p-1 rounded-full transition-all ${editingPrompt.is_favorite ? 'bg-amber-500' : 'bg-slate-300'}`}>
+                                            <div onClick={() => setEditingPrompt({ ...editingPrompt, is_favorite: editingPrompt.is_favorite ? 0 : 1 })} className={`p-1 rounded-full transition-all ${editingPrompt.is_favorite ? 'bg-amber-500' : 'bg-slate-300'}`}>
                                                 {editingPrompt.is_favorite ? <ToggleRight size={24} className="text-white" /> : <ToggleLeft size={24} className="text-slate-400" />}
                                             </div>
                                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Favorito (Topo da Lista)</span>
@@ -1146,12 +1147,12 @@ const Settings = ({ systemInfo, onUpdateSystemInfo, designSystem, setDesignSyste
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Corpo de Instrução (System Prompt)</label>
-                                        <textarea rows={8} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm outline-none focus:bg-white transition-all shadow-inner" value={editingPrompt.content} onChange={e => setEditingPrompt({...editingPrompt, content: e.target.value})} placeholder="Instruções detalhadas para a IA..." />
+                                        <textarea rows={8} className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-6 text-sm outline-none focus:bg-white transition-all shadow-inner" value={editingPrompt.content} onChange={e => setEditingPrompt({ ...editingPrompt, content: e.target.value })} placeholder="Instruções detalhadas para a IA..." />
                                     </div>
                                     <div className="pt-6 border-t border-slate-100 flex gap-4">
                                         <button type="button" onClick={() => setIsPromptModalOpen(false)} className="flex-1 py-5 text-slate-400 font-black text-[10px] uppercase tracking-widest">Abortar</button>
                                         <button type="submit" disabled={isSaving} className="flex-[2] py-5 bg-slate-950 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3">
-                                            {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Sincronizar Prompt
+                                            {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Sincronizar Prompt
                                         </button>
                                     </div>
                                 </form>

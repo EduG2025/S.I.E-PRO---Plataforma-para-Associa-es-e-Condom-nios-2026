@@ -1,3 +1,4 @@
+
 import express from 'express';
 import * as resController from '../controllers/residentController.js';
 import { authenticateToken, checkPermission } from '../middlewares/auth.js';
@@ -22,5 +23,10 @@ router.post('/report-incident', authenticateToken, resController.reportIncident)
 
 // 6. Histórico de Acesso
 router.get('/access-logs', authenticateToken, resController.getMyAccessLogs);
+
+// 7. Smart Guest System
+router.get('/invitations', authenticateToken, resController.getMyInvitations);
+router.post('/invitations', authenticateToken, resController.createInvitation);
+router.delete('/invitations/:id', authenticateToken, resController.cancelInvitation);
 
 export default router;
